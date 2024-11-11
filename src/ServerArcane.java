@@ -193,8 +193,7 @@ public class ServerArcane {
                     roomName = cmd[1];
                     broadcastT("房间名已更新为[%o]", roomName, NightShell.SOFT_WHITE);
                     updateParaText();
-                }
-                else if (cmd.length > 2) shell.print("房间名不能包含空格\n", true);
+                } else if (cmd.length > 2) shell.print("房间名不能包含空格\n", true);
                 else shell.print("未知指令，用法：/RN <name>\n", true);
             }
             case NightShell.ReColor -> {
@@ -206,6 +205,15 @@ public class ServerArcane {
                                 NightShell.newNotice("(%o)]已变更特征色", serverName, minorColor)));
                     } else shell.print("错误的格式，示例：/rec 41CCFFFF 0C8EBEFF\n", true);
                 } else shell.print("用法（十六进制颜色码）：/rec [MainColor] [MinorColor]\n", true);
+            }
+            case NightShell.ResetFont -> {
+                if (cmd.length == 3) {
+                    String type; int size;
+                    if (!(type = cmd[1]).isBlank() && cmd[2].matches("[0-9]+") && cmd[2].length() < 4) {
+                        size = Integer.parseInt(cmd[2]);
+                        shell.print("当前字体已变更为：%o\n", shell.setFont(type, size), NightShell.SOFT_GREY, true);
+                    } else shell.print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
+                } else {shell.setDefaultFont(); shell.print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
             }
             case NightShell.EjectOne -> {
                 if (cmd.length == 2) {
@@ -365,15 +373,16 @@ public class ServerArcane {
     }
 
     private static final String HELP_TEXT = """
-                /H                指令帮助
-                /T                关闭服务器
-                /L                成员列表
-                /C                清空提示字
-                /rec            自定义特征色
-                /color          查看色彩规范
-                /host           查看地址与端口号
-                /bth(/ath)      禁止/允许成员选中文本
-                /bnc(/anc)      禁止/允许新成员加入
+                /H                 指令帮助
+                /T                 关闭服务器
+                /L                 成员列表
+                /C                 清空提示字
+                /ref              重设显示字体
+                /rec              自定义特征色
+                /color           查看色彩规范
+                /host            查看地址与端口号
+                /bth(/ath)     禁止/允许成员选中文本
+                /bnc(/anc)    禁止/允许新成员加入
                 /E [member] 将成员请出房间
                 /RN [name]  重命名房间
                 """;

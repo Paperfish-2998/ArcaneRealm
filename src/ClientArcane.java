@@ -182,6 +182,15 @@ public class ClientArcane {
                     } else shell.print("错误的格式，示例：/rec 41CCFFFF 0C8EBEFF\n", true);
                 } else shell.print("用法（十六进制颜色码）：/rec [MainColor] [MinorColor]\n", true);
             }
+            case NightShell.ResetFont -> {
+                if (cmd.length == 3) {
+                    String type; int size;
+                    if (!(type = cmd[1]).isBlank() && cmd[2].matches("[0-9]+") && cmd[2].length() < 4) {
+                        size = Integer.parseInt(cmd[2]);
+                        shell.print("当前字体已变更为：%o\n", shell.setFont(type, size), NightShell.SOFT_GREY, true);
+                    } else shell.print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
+                } else {shell.setDefaultFont(); shell.print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
+            }
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
     }
@@ -221,6 +230,7 @@ public class ClientArcane {
                 /L    成员列表
                 /E    退出房间
                 /C    清空提示字
+                /ref  重设显示字体
                 /rec  自定义特征色
                 /color 查看色彩规范
                 /host 查看地址与端口号

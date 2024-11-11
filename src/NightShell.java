@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
-// TODO 自定义字体
 /**
  * Night Shell v2.8 <br/>
  * by PaperFish, 2024.11.7
@@ -102,6 +101,18 @@ public class NightShell extends JFrame {
     public void setDisplayHighlightable(boolean bool) {
         if (bool) displayArea.setHighlighter(new DefaultHighlighter());
         else displayArea.setHighlighter(null);
+    }
+
+    public String setFont(String type, int size) {
+        Font new_f = new Font(type, Font.PLAIN, size);
+        displayArea.setFont(new_f);
+        inputArea.setFont(new_f);
+        Font curr_f = displayArea.getFont();
+        return curr_f.getName() + ", " + curr_f.getSize();
+    }
+    public void setDefaultFont() {
+        displayArea.setFont(DEFAULT_FONT);
+        inputArea.setFont(DEFAULT_FONT);
     }
 
     public void prefillInput(String string) {inputArea.setText(string);}
@@ -248,6 +259,7 @@ public class NightShell extends JFrame {
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
     static final String ReColor = "/rec";
+    static final String ResetFont = "/ref";
     static final String BanTextHighlight = "/bth";
     static final String AllowTextHighlight = "/ath";
     static final String BanNewClient = "/bnc";
