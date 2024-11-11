@@ -17,7 +17,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
-
+// TODO 服务器地址与端口号可以合并在一行：xx.xx.xxx.xxx:zzzzz
 /**
  * Night Shell v2.8 <br/>
  * by PaperFish, 2024.11.7
@@ -53,7 +53,7 @@ public class NightShell extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (!SHIFT) EnterInput();
                     else {try {inputArea.getDocument().insertString(inputArea.getCaretPosition(), "\n", null);
-                        } catch (BadLocationException ex) {ex.printStackTrace();}}
+                    } catch (BadLocationException ex) {ex.printStackTrace();}}
                     e.consume();
                 }
             }
@@ -388,7 +388,7 @@ public class NightShell extends JFrame {
     public static String getLocalIPv4Address() throws SocketException {
         return NetworkInterface.networkInterfaces()
                 .filter(netIf -> {try {return netIf.isUp() && !netIf.isLoopback() && !netIf.isVirtual();
-                    } catch (SocketException e) {return false;}})
+                } catch (SocketException e) {return false;}})
                 .flatMap(NetworkInterface::inetAddresses)
                 .filter(a -> a instanceof Inet4Address && !a.isLoopbackAddress())
                 .map(InetAddress::getHostAddress)
