@@ -38,12 +38,10 @@ public class ServerArcane {
             @Override boolean setPort() {
                 if (host.isBlank()) return false;
                 if (port != -1) return true; int P;
-                if (input.isBlank() || !input.matches("[0-9]+") || ((P = Integer.parseInt(input)) < 0) || (P > 65535)) {
-                    println(new1("无效的端口号", SOFT_RED), true);
-                } else {
+                if (!input.isBlank() && input.matches("[0-9]+") && ((P = Integer.parseInt(input)) > -1) && (P < 65536)) {
                     println(new1(input, LIGHT_GREEN), true); port = P; Notify(); return false;
-                }
-                print(newWhisper("设定端口号（0~65535）："), true); return false;
+                } else println(new1("无效的端口号", SOFT_RED), true);
+                print("设定端口号（0~65535）：", true); return false;
             }
         };
         try {
@@ -65,8 +63,7 @@ public class ServerArcane {
         try {
             serverSocket = new ServerSocket(port);
             shell.clearWhisper();
-            shell.print("位于Ipv4: %o ", host, Color.WHITE, false);
-            shell.print("上的服务器已启动（端口：%o）\n", port, Color.WHITE, false);
+            shell.print("位于Ipv4地址: %o 上的服务器已启动\n", host+":"+port, Color.WHITE, false);
         } catch (IOException e) {
             shell.printlnException("创建服务器失败：", e);
             END = true; return;
@@ -293,11 +290,9 @@ public class ServerArcane {
         return m;
     }
     public synchronized NightShell.Message getHostPort() {
-        NightShell.Message m = NightShell.newN(4);
-        m.words[0] = "服务器IPv4地址："; m.colors[0] = NightShell.SOFT_GREY;
-        m.words[1] = host;  m.colors[1] = NightShell.SOFT_WHITE;
-        m.words[2] = "\n端口号：";  m.colors[2] = NightShell.SOFT_GREY;
-        m.words[3] = String.valueOf(port);  m.colors[3] = NightShell.SOFT_WHITE;
+        NightShell.Message m = NightShell.newN(2);
+        m.words[0] = "服务器IPv4地址: "; m.colors[0] = NightShell.SOFT_GREY;
+        m.words[1] = host + ":" + port;  m.colors[1] = NightShell.SOFT_WHITE;
         return m;
     }
     public void updateParaText() {

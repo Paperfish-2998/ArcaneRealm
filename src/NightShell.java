@@ -1,6 +1,7 @@
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.*;
 import java.awt.*;
@@ -17,7 +18,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
-// TODO 服务器地址与端口号可以合并在一行：xx.xx.xxx.xxx:zzzzz
+// TODO 自定义字体
 /**
  * Night Shell v2.8 <br/>
  * by PaperFish, 2024.11.7
@@ -39,10 +40,18 @@ public class NightShell extends JFrame {
 
         addTextPane(displayArea, false, SOFT_BLACK, BorderLayout.CENTER);
         addTextPane(inputArea, true, HARD_GREY, BorderLayout.SOUTH);
-        inputArea.setPreferredSize(new Dimension(getWidth(), 48));
         addDocListeners();
+        preconfigure();
         setVisible(true);
         print("%o ,by Paperfish\n\n", VERSION, LIGHT_GREY, true);
+    }
+
+    private void preconfigure() {
+        inputArea.setPreferredSize(new Dimension(getWidth(), 48));
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
+        } catch (Exception e) {e.printStackTrace();}
     }
 
     private void addDocListeners() {
@@ -322,7 +331,6 @@ public class NightShell extends JFrame {
         button.setBorderPainted(false);
         button.setFocusPainted(false);
     }
-    boolean setHost() {return true;}
     boolean setPort() {return true;}
     boolean setName() {return true;}
 

@@ -35,43 +35,38 @@ public class ClientArcane {
                         say(ExitSys);}
                 } super.processWindowEvent(e);
             }
-            @Override void EnterInput() {super.EnterInput(); if (setHost() && setPort() && setName()) say(input);}
-            @Override boolean setHost() {
-                if (guest.isBlank()) return false;
-                if (!host.isBlank()) return true;
-                if (!input.isBlank()) {host = input; println(new1(input, LIGHT_GREY), true);
-                    print(newWhisper("端口号："), true); return false;}
-                println(new1("无效的地址", SOFT_RED), true);
-                print(newWhisper("服务器地址（IPv4）："), true); return false;
-            }
+            @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
-                if (port != -1) return true; int P;
-                if (input.isBlank() || !input.matches("[0-9]+") || ((P = Integer.parseInt(input)) < 0) || (P > 65535)) {
-                    println(new1("无效的端口号", SOFT_RED), true);
-                } else {
-                    print(new1(input, LIGHT_GREY), true);
-                    try {
-                        clientSocket = new Socket();
-                        clientSocket.connect(new InetSocketAddress(host, P), 2500); port = P;
-                        shell.print(" -> %o\n你的名称：", "可用", Color.GREEN, true);
-                        Notify(); return false;
-                    } catch (IOException ex) {
-                        shell.print(" -> %o：服务器未开启或无法连接\n", "连接超时", SOFT_RED, true);
-                    }
-                }
-                print(newWhisper("端口号："), true); return false;
+                if (guest.isBlank()) return false;
+                if (port != -1) return true;
+                String[] HP;
+                if (!input.isBlank() && ((HP = input.split(":")).length == 2) && !HP[0].isBlank() && !HP[1].isBlank()) {
+                    int P;
+                    if (HP[1].matches("[0-9]+") && ((P = Integer.parseInt(HP[1])) > -1) && (P < 65536)) {
+                        print(new1(HP[0]+":"+HP[1], LIGHT_GREY), true);
+                        try {
+                            clientSocket = new Socket();
+                            clientSocket.connect(new InetSocketAddress(HP[0], P), 2500);
+                            host = HP[0]; port = P;
+                            print(" -> %o\n你的名称：", "可用", Color.GREEN, true);
+                            Notify(); return false;
+                        } catch (IOException ex) {
+                            print(" -> %o：服务器未开启或无法连接\n", "连接超时", SOFT_RED, true);}
+                    } else println(new1("无效的端口号", SOFT_RED), true);
+                } else print(" -> %o\n>> 示例：xx.xx.xxx.xxx:zzzzz\n", "无效的格式", SOFT_RED, true);
+                print("服务器IPv4地址+端口号：", true); return false;
             }
             @Override boolean setName() {
                 if (!name.isBlank()) return true;
                 if (input.isBlank()) println(new1("无效的名称", SOFT_RED), true);
                 else if (tryJoin(input)) {name = input; Notify(); return false;}
-                print(newWhisper("你的名称："), true); return false;
+                print("你的名称：", true); return false;
             }
         };
         try {
             String localIPv4 = NightShell.getLocalIPv4Address();
             if (localIPv4 == null) shell.print("%o至网络", "无法连接", NightShell.HARD_RED, true);
-            else {guest = localIPv4; shell.print("服务器地址（IPv4）：", true);}
+            else {guest = localIPv4; shell.print("服务器IPv4地址+端口号：", true);}
         } catch (SocketException e) {
             shell.printlnException("尝试获取网络地址时出错：", e);
         }
