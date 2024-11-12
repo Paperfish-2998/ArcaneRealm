@@ -25,6 +25,7 @@ import java.util.List;
 /**
  * Night Shell v2.8 <br/>
  * by PaperFish, 2024.11.7
+ * asd
  */
 public class NightShell extends JFrame {
     public static final String VERSION = "Arcane Realm v1.5";
