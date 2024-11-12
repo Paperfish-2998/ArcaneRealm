@@ -120,7 +120,7 @@ public class ClientArcane {
                         case '/' -> execute(message);
                         case ':' -> shell.println(message, false);
                         case '_' -> shell.printlnLink(message, false);
-                        case 'i' -> shell.showImage(message.image);
+                        case 'i' -> shell.examineImage(message.image);
                     }
                 }
                 listener.close();
@@ -227,7 +227,7 @@ public class ClientArcane {
 
     private void sendPicture() {
         String path;
-        while ((path = shell.choosePicture()).isEmpty()) NightShell.doNothing();
+        while ((path = shell.chooseImage()).isEmpty()) NightShell.doNothing();
         if (!path.equals("0")) {
             BufferedImage image = shell.imageOf(path);
             if (image != null) report(NightShell.newImage(image));

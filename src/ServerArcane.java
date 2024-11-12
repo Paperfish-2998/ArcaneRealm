@@ -34,8 +34,8 @@ public class ServerArcane {
             }
             @Override void sendPictureRequirement(String timestamp) {
                 BufferedImage image = timestamp_image.get(timestamp);
-                if (image != null) shell.showImage(image);
-                else jErrorDialog(null, "资源已丢失", "查看失败");}
+                if (image != null) shell.examineImage(image);
+                else jErrorDialog(null, "资源已被清理", "查看失败");}
             @Override void EnterInput() {super.EnterInput(); if (setPort()) say(input);}
             @Override boolean setPort() {
                 if (host.isBlank()) return false;

@@ -3,6 +3,7 @@ import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.MouseInputAdapter;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.*;
@@ -502,27 +503,57 @@ public class NightShell extends JFrame {
             super.paint(g); if (image != null) g.drawImage(image, 0, 0, this);
         }
     }
-    public void showImage(BufferedImage image) {SwingUtilities.invokeLater(() -> new ImageDisplay(image).setVisible(true));}
     public BufferedImage imageOf(String path) {
         try {return ImageIO.read(new File(path));
         } catch (IOException e) {jErrorDialog(null, "图像文件已损坏", "读取失败");
         } return null;
     }
-
-    public String choosePicture() {
+    public void showImage(BufferedImage image) {SwingUtilities.invokeLater(() -> new ImageDisplay(image).setVisible(true));}
+    public void saveImage(BufferedImage image) {
         JFileChooser chooser = new JFileChooser();
-        if (chooser.showOpenDialog(this) == 0) {
+        chooser.setFileFilter(new FileNameExtensionFilter("PNG Images", "png"));
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            int i = 0;
+            try {File file = chooser.getSelectedFile();
+                String rowName = file.getName().replace(".png", "");
+                file = new File(file.getParent(), rowName + ".png");
+                while(file.exists()) file = new File(file.getParent(), rowName+"("+(++i)+")"+".png");
+                if (ImageIO.write(image, "png", file))
+                    jInformationDialog(this, "成功保存到：" + file.getName(), "Done!");
+                else jErrorDialog(this, "保存失败", "Error");
+            } catch (IOException e) {
+                jErrorDialog(this, "保存失败："+e.getMessage(), "Error");
+            }
+        }
+    }
+    public String chooseImage() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new FileNameExtensionFilter("PNG Images", "png"));
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             String path = chooser.getSelectedFile().getAbsolutePath();
             if (path.endsWith(".png") && new File(path).exists()) return path;
             else {jErrorDialog(this, "请上传png格式的图片", "格式错误"); return "";}
         } return "0";
     }
-
-    public int jConfirmDialog(Component pc, String message, String title) {
-        return JOptionPane.showConfirmDialog(pc, message, title, JOptionPane.OK_CANCEL_OPTION);
+    public void examineImage(BufferedImage image) {
+        switch (triadsChooseDialog(this, "请选择对图片进行：", "Choose", new String[]{"查看", "保存", "取消"})) {
+            case 0 -> showImage(image);
+            case 1 -> saveImage(image);
+        }
     }
-    public void jErrorDialog(Component pc, String message, String title) {
-        JOptionPane.showMessageDialog(pc, message, title, JOptionPane.ERROR_MESSAGE);
+
+    public int jConfirmDialog(Component MF, String message, String title) {
+        return JOptionPane.showConfirmDialog(MF, message, title, JOptionPane.OK_CANCEL_OPTION);
+    }
+    public void jInformationDialog(Component MF, String message, String title) {
+        JOptionPane.showMessageDialog(MF, message, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+    public void jErrorDialog(Component MF, String message, String title) {
+        JOptionPane.showMessageDialog(MF, message, title, JOptionPane.ERROR_MESSAGE);
+    }
+    public int triadsChooseDialog(Component MF, String message, String title, String[] options) {
+        return JOptionPane.showOptionDialog(MF, message, title, JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
     }
 
     public static void doNothing() {}
