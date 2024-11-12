@@ -1,13 +1,13 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.awt.image.BufferedImage;
+import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * ArcaneRealm v1.5: Server
@@ -34,6 +34,11 @@ public class ServerArcane {
                     say(TerminalSys);
                 } super.processWindowEvent(e);
             }
+            @Override void sendPictureRequirement(String timestamp) {
+                System.out.println(timestamp);
+                BufferedImage image = timestamp_image.get(timestamp);
+                if (image != null) NightShell.showImage(image);
+                else JOptionPane.showMessageDialog(null, "资源已丢失", "查看失败", JOptionPane.ERROR_MESSAGE);}
             @Override void EnterInput() {super.EnterInput(); if (setPort()) say(input);}
             @Override boolean setPort() {
                 if (host.isBlank()) return false;
@@ -161,6 +166,7 @@ public class ServerArcane {
     private synchronized void broadcast(NightShell.Message message) {tellAll(message); shell.println(message, false);}
     private synchronized void broadcastT(NightShell.Message message) {tellAll(message); shell.print(message, false); shell.printlnTime();}
     private synchronized void broadcastT(String words, Object objects, Color colors) {broadcastT(NightShell.newNotice(words, objects, colors));}
+    private synchronized void broadcastLink(NightShell.Message message) {tellAll(message); shell.printlnLink(message);}
 
     /**
      * 执行服务器指令
@@ -179,6 +185,7 @@ public class ServerArcane {
             case NightShell.MemberList -> shell.println(getMemberList(true), true);
             case NightShell.HostPort -> shell.println(getHostPort(), true);
             case NightShell.ClearWhisper -> shell.clearWhisper();
+            case NightShell.ClearImageCache -> {timestamp_image.clear(); broadcastT("服务器已%o图片缓存", "清理", NightShell.SOFT_RED);}
             case NightShell.BanTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
             case NightShell.AllowTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
@@ -236,30 +243,43 @@ public class ServerArcane {
     }
 
     /**
-     * 处理客户端请求 <- ClientArcane.request()
+     * 处理客户端请求 <- ClientArcane.request()/.report()
      */
     private synchronized void response(ClientAntenna C, NightShell.Message M) {
-        String K = M.words[0];
-        if (K.equals(NightShell.TALK)) {
-            broadcast(NightShell.newLines(M.words[1], C.name, C.mainColor, C.minorColor)); return;
-        }
-        shell.print("Responded to [%o]'s request: ", C.name, C.mainColor, false);
-        shell.print(K, NightShell.LIGHT_GREY, false);
-        shell.printlnTime();
-        switch (K) {
-            case NightShell.ExitSys -> clientExit(C);
-            case NightShell.MemberList -> order(C, NightShell.INFO, getMemberList(false).serialized());
-            case NightShell.HostPort -> order(C, NightShell.INFO, getHostPort().serialized());
-            case NightShell.ReColor -> {
-                String[] hexColors = M.words[1].split(" ");
-                C.mainColor = NightShell.hexColor(hexColors[0]);
-                C.minorColor = NightShell.hexColor(hexColors[1]);
-                broadcastT(NightShell.merge(NightShell.newNotice("成员[%o ", C.name, C.mainColor),
-                        NightShell.newNotice("(%o)]已变更特征色", C.name, C.minorColor)));
+        if (M.type == '/') {String K = M.words[0];
+            if (K.equals(NightShell.TALK)) {
+                broadcast(NightShell.newLines(M.words[1], C.name, C.mainColor, C.minorColor));
+                return;
             }
-            default -> order(C, K);
+            shell.print("Responded to [%o]'s request: ", C.name, C.mainColor, false);
+            shell.print(K, NightShell.LIGHT_GREY, false);
+            shell.printlnTime();
+            switch (K) {
+                case NightShell.ExitSys -> clientExit(C);
+                case NightShell.MemberList -> order(C, NightShell.INFO, getMemberList(false).serialized());
+                case NightShell.HostPort -> order(C, NightShell.INFO, getHostPort().serialized());
+                case NightShell.ReColor -> {
+                    String[] hexColors = M.words[1].split(" ");
+                    C.mainColor = NightShell.hexColor(hexColors[0]);
+                    C.minorColor = NightShell.hexColor(hexColors[1]);
+                    broadcastT(NightShell.merge(NightShell.newNotice("成员[%o ", C.name, C.mainColor),
+                            NightShell.newNotice("(%o)]已变更特征色", C.name, C.minorColor)));
+                }
+                case NightShell.RequestImage -> {
+                    BufferedImage image = timestamp_image.get(M.words[1]);
+                    if (image != null) tell(C, NightShell.newImage(image));
+                    else tell(C, NightShell.newOrder(NightShell.ResourceLoss, 0));
+                }
+                default -> order(C, K);
+            }
+        } else if (M.type == 'i') {
+            String timestamp = NightShell.nowTime(false);
+            timestamp_image.put(timestamp, M.image);
+            broadcastLink(NightShell.newLinkOfPicture(timestamp, C.name, C.mainColor, C.minorColor));
         }
     }
+
+    private final Map<String, BufferedImage> timestamp_image = new HashMap<>();
 
     /**
      * 向客户端发送指示 -> ClientArcane.execute()
@@ -377,6 +397,7 @@ public class ServerArcane {
                 /T                 关闭服务器
                 /L                 成员列表
                 /C                 清空提示字
+                /cli              清除图片缓存
                 /ref              重设显示字体
                 /rec              自定义特征色
                 /color           查看色彩规范

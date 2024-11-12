@@ -1,10 +1,8 @@
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.awt.image.BufferedImage;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketException;
@@ -35,6 +33,7 @@ public class ClientArcane {
                         say(ExitSys);}
                 } super.processWindowEvent(e);
             }
+            @Override void sendPictureRequirement(String timestamp) {request(RequestImage, timestamp);}
             @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
                 if (guest.isBlank()) return false;
@@ -120,8 +119,10 @@ public class ClientArcane {
                     if ((serMess = listener.readLine()) == null || serMess.isBlank()) continue;
                     NightShell.Message message = shell.deserialized(serMess);
                     switch (message.type) {
-                        case ':' -> shell.println(message, false);
                         case '/' -> execute(message);
+                        case ':' -> shell.println(message, false);
+                        case '_' -> shell.printlnLink(message);
+                        case 'i' -> NightShell.showImage(message.image);
                     }
                 }
                 listener.close();
@@ -129,7 +130,6 @@ public class ClientArcane {
                 clientSocket.close();
             } catch (IOException e) {
                 shell.printlnException("连接已丢失：", e);
-                e.printStackTrace();
             }
         });
         Ear.start();
@@ -191,6 +191,7 @@ public class ClientArcane {
                     } else shell.print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
                 } else {shell.setDefaultFont(); shell.print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
             }
+            case NightShell.SendPicture -> sendPicture();
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
     }
@@ -200,7 +201,7 @@ public class ClientArcane {
      */
     private void request(String order, String... args) {
         switch (order) {
-            case NightShell.JoinRequest, NightShell.TALK -> report(NightShell.newOrder(order, args[0]));
+            case NightShell.JoinRequest, NightShell.TALK, NightShell.RequestImage -> report(NightShell.newOrder(order, args[0]));
             case NightShell.ReColor -> report(NightShell.newOrder(order, args[0]+" "+args[1]));
             default -> report(NightShell.newOrder(order, 0));
         }
@@ -217,6 +218,7 @@ public class ClientArcane {
             case NightShell.TerminalSys, NightShell.ExitSys -> {EarClose(); shell.print("失去与服务器的连接\n", false);}
             case NightShell.AllowTextHighlight -> shell.setDisplayHighlightable(true);
             case NightShell.BanTextHighlight -> shell.setDisplayHighlightable(false);
+            case NightShell.ResourceLoss -> JOptionPane.showMessageDialog(null, "资源已丢失", "查看失败", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -225,10 +227,28 @@ public class ClientArcane {
         shell.setTitle(String.format("%s | 客户端：%s | (在线人数：%s)", args[0], name, args[1]));
     }
 
+    private void sendPicture() {
+        String path;
+        while ((path = choosePicture()).isEmpty()) NightShell.doNothing();
+        if (!path.equals("0")) {
+            BufferedImage image = NightShell.imageOf(path);
+            if (image != null) report(NightShell.newImage(image));
+        }
+    }
+    private String choosePicture() {
+        JFileChooser chooser = new JFileChooser();
+        if (chooser.showOpenDialog(shell) == 0) {
+            String path = chooser.getSelectedFile().getAbsolutePath();
+            if (path.endsWith(".png") && new File(path).exists()) return path;
+            else {JOptionPane.showMessageDialog(shell, "请上传png格式的图片", "格式错误", JOptionPane.ERROR_MESSAGE); return "";}
+        } return "0";
+    }
+
     private static final String HELP_TEXT = """
                 /H    指令帮助
                 /L    成员列表
                 /E    退出房间
+                /P    发送图片
                 /C    清空提示字
                 /ref  重设显示字体
                 /rec  自定义特征色

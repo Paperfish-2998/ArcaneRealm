@@ -1,11 +1,14 @@
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.event.MouseInputAdapter;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -18,6 +21,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
+//todo 图片传输
 /**
  * Night Shell v2.8 <br/>
  * by PaperFish, 2024.11.7
@@ -47,11 +51,20 @@ public class NightShell extends JFrame {
 
     private void preconfigure() {
         inputArea.setPreferredSize(new Dimension(getWidth(), 48));
+        displayArea.addMouseListener(new MouseInputAdapter() {
+            @Override public void mouseClicked(MouseEvent e) {
+                int clickOffset = displayArea.viewToModel2D(e.getPoint());
+                for (LinkInfo link : links) {
+                    if (clickOffset >= link.start && clickOffset <= link.end) {
+                        sendPictureRequirement(link.timestamp); return;
+            }}}
+        });
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
         } catch (Exception e) {e.printStackTrace();}
     }
+    void sendPictureRequirement(String timestamp) {}
 
     private void addDocListeners() {
         inputArea.addKeyListener(new KeyAdapter() {
@@ -127,11 +140,20 @@ public class NightShell extends JFrame {
                 for (int i = hintRange.size()-1; i>=0; i--) {
                     Range range = hintRange.get(i);
                     doc.remove(range.start, range.length);
+                    for (LinkInfo link : links)
+                        if (link.start > range.start+range.length)
+                            link.move(-range.length);
                     hintRange.remove(i);
                 }
             } catch (BadLocationException ignored) {
             } finally {textLock.unlock();}
         });
+    }
+    private final List<LinkInfo> links = new ArrayList<>();
+    private static class LinkInfo {
+        int start, end; String timestamp;
+        LinkInfo(int a, int l, String ts) {start = a-l; end = a; timestamp = ts;}
+        public void move(int d) {start+=d; end+=d;}
     }
 
     public synchronized void print(String string, Color color, boolean isHint) {
@@ -155,20 +177,38 @@ public class NightShell extends JFrame {
     public synchronized void print(String words, boolean isHint) {print(NightShell.newWhisper(words), isHint);}
     public synchronized void print(String words, Object objects, Color color, boolean isHint) {print(NightShell.newWhisper(words, objects, color), isHint);}
 
-    public synchronized void printTime(String words) {print(words.replace("%t", nowTime()), false);}
+    public synchronized void printTime(String words) {print(words.replace("%t", nowTime(true)), false);}
     public synchronized void printlnTime() {printTime(" (%t)\n");}
     public synchronized void printlnException(String s, Exception e) {
         print(s, SOFT_GREY, false); print(e.getMessage()+"\n", HARD_RED, false);
     }
 
+    public synchronized void printlnLink(Message message) {
+        for (int i=0; i<2; i++)
+            print(message.words[i], message.colors[i], false);
+        SwingUtilities.invokeLater(() -> {textLock.lock();
+            try {
+                SimpleAttributeSet set = new SimpleAttributeSet();
+                StyleConstants.setForeground(set, SOFT_PINK);
+                Document doc = displayArea.getStyledDocument();
+                doc.insertString(doc.getLength(), "[图片]\n", set);
+                links.add(new LinkInfo(doc.getLength(), 5, message.words[2]));
+            }
+            catch (BadLocationException ignored) {}
+            finally {textLock.unlock();}
+        });
+    }
+
     public static class Message implements Serializable {
+        char type;
         String[] words;
         Color[] colors;
-        char type;
+        transient BufferedImage image;
         public Message(char type, String[] words, Color[] colors) {
             this.type = type;
             this.words = words;
             this.colors = colors;
+            this.image = new BufferedImage(1, 1, 1);
         }
         public String serialized() {
             try {
@@ -182,10 +222,33 @@ public class NightShell extends JFrame {
             }
             return "";
         }
+        @Serial private void writeObject(ObjectOutputStream out) throws IOException {
+            out.defaultWriteObject();
+            if (image != null) {
+                ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+                ImageIO.write(image, "png", byteStream);
+                byte[] imageBytes = byteStream.toByteArray();
+                out.writeInt(imageBytes.length);
+                out.write(imageBytes);
+            } else {out.writeInt(0);}
+        }
+        @Serial private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+            in.defaultReadObject();
+            int length = in.readInt();
+            if (length > 0) {
+                byte[] imageBytes = new byte[length];
+                in.readFully(imageBytes);
+                ByteArrayInputStream byteStream = new ByteArrayInputStream(imageBytes);
+                image = ImageIO.read(byteStream);
+            }
+        }
     }
 
     public static Message newLines(String word, String name, Color main, Color minor) {
-        return new Message(':', new String[]{name+" ", nowTime()+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
+        return new Message(':', new String[]{name+" ", nowTime(true)+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
+    }
+    public static Message newLinkOfPicture(String timestamp, String name, Color main, Color minor) {
+        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp}, new Color[]{main, minor, SOFT_PINK});
     }
     public static Message newNotice(String word) {
         return new Message(':', new String[]{word}, new Color[]{LIGHT_GREY});
@@ -218,6 +281,9 @@ public class NightShell extends JFrame {
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.words)).toArray(String[]::new),
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.colors)).toArray(Color[]::new));
     }
+    public static Message newImage(BufferedImage image) {
+        Message m = new0(); m.type = 'i'; m.image = image; return m;
+    }
     public Message deserialized(String s) {
         try {
             byte[] data = Base64.getDecoder().decode(s);
@@ -245,6 +311,7 @@ public class NightShell extends JFrame {
     static final Color DARK_AQUA = new Color(12, 142, 190);
     static final Color LIGHT_ORANGE = new Color(255, 193, 78, 255);
     static final Color DARK_ORANGE = new Color(199, 134, 14);
+    static final Color SOFT_PINK = new Color(255, 177, 200);
     static final Color SOFT_RED = new Color(253, 105, 97);      // Notice Reject
     static final Color HARD_RED = new Color(215, 13, 0);        // System Error/Exception
     static final Color DARK_RED = new Color(159, 8, 0);         // System Deny
@@ -254,7 +321,9 @@ public class NightShell extends JFrame {
     static final String EjectOne = "/E";
     static final String TerminalSys = "/T";
     static final String MemberList = "/L";
+    static final String SendPicture = "/P";
     static final String ClearWhisper = "/C";
+    static final String ClearImageCache = "/cli";
     static final String RenameRoom = "/RN";
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
@@ -270,11 +339,14 @@ public class NightShell extends JFrame {
     static final String JoinAccept = "join_accept";
     static final String UpdateTitle = "update_title";
     static final String UnusableName = "unusable_name";
+    static final String RequestImage = "request_image";
+    static final String ResourceLoss = "resource_loss";
     static final String INFO = "information";
     static final String TALK = "talk";
 
-    private static String nowTime() {
-        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    public static String nowTime(boolean normative) {
+        if (normative) return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        else return LocalDateTime.now().toString();
     }
     public static Color hexColor(String hexadecimal) {
         if (hexadecimal.length() == 8 && hexadecimal.matches("[#0-9a-fA-F]+")) {
@@ -415,4 +487,25 @@ public class NightShell extends JFrame {
                 .findFirst()
                 .orElse(null);
     }
+
+    public static class ImageDisplay extends JFrame {
+        private final BufferedImage image;
+        public ImageDisplay(BufferedImage image) {
+            this.image = image;
+            setSize(image.getWidth(), image.getHeight());
+            setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            setLocationRelativeTo(null);
+        }
+        @Override public void paint(Graphics g) {
+            super.paint(g); if (image != null) g.drawImage(image, 0, 0, this);
+        }
+    }
+    public static void showImage(BufferedImage image) {SwingUtilities.invokeLater(() -> new ImageDisplay(image).setVisible(true));}
+    public static BufferedImage imageOf(String path) {
+        try {return ImageIO.read(new File(path));
+        } catch (IOException e) {JOptionPane.showMessageDialog(null, "图像文件已损坏", "读取失败", JOptionPane.ERROR_MESSAGE);
+        } return null;
+    }
+
+    public static void doNothing() {}
 }
