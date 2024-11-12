@@ -23,9 +23,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
 
 /**
- * Night Shell v2.8 <br/>
- * by PaperFish, 2024.11.7
- * asd
+ * Night Shell v2.9 <br/>
+ * by PaperFish, 2024.11.13
  */
 public class NightShell extends JFrame {
     public static final String VERSION = "Arcane Realm v1.5";

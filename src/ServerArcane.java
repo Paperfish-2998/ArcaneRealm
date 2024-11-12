@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ArcaneRealm v1.5: Server
- * by PaperFish, 2024.11.6
+ * ArcaneRealm v1.6: Server
+ * by PaperFish, 2024.11.13
  */
 public class ServerArcane {
     private ServerSocket serverSocket;

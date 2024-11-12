@@ -7,8 +7,8 @@ import java.net.Socket;
 import java.net.SocketException;
 
 /**
- * ArcaneRealm v1.5: Client
- * by PaperFish, 2024.11.6
+ * ArcaneRealm v1.6: Client
+ * by PaperFish, 2024.11.13
  */
 public class ClientArcane {
     private Socket clientSocket;
