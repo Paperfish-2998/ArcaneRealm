@@ -594,8 +594,9 @@ public class NightShell extends JFrame {
     boolean overloadConfig() {return loadConfig("0");}
     boolean loadConfig(String ter) {
         String configPath = "./config/" + ter + ".json";
+        File configFile = new File(configPath);
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        if (new File(configPath).exists()) {
+        if (configFile.exists()) {
             try (Reader reader = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
                 config = gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType());
             } catch (Exception e) {jErrorDialog(null, "读取配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
@@ -603,8 +604,11 @@ public class NightShell extends JFrame {
             config.put("cache", "./cache/"+ter+"/");
             config.put("upload", "");
             if ("server".equals(ter)) config.put("share", "./resource/share");
-            try (FileWriter writer = new FileWriter(configPath)) {
-                gson.toJson(config, writer);
+            try {if (new File(configFile.getParent()).mkdirs() && !configFile.createNewFile()) {
+                jErrorDialog(null, "程序无法运行，未知原因无法创建配置文件："+configPath, "Error"); return false;}
+                try (FileWriter writer = new FileWriter(configPath)) {
+                    gson.toJson(config, writer);
+                }
             } catch (Exception e) {jErrorDialog(null, "创建配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
         }
         return !(cannotCreateFolder(config.get("cache")) | ("server".equals(ter) && cannotCreateFolder(config.get("share"))));
