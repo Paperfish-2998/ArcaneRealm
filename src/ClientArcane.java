@@ -7,7 +7,7 @@ import java.net.Socket;
 import java.net.SocketException;
 
 /**
- * ArcaneRealm v1.6: Client
+ * ArcaneRealm: Client
  * by PaperFish, from 2024.11
  */
 public class ClientArcane {
@@ -32,8 +32,8 @@ public class ClientArcane {
                 } super.processWindowEvent(e);
             }
             @Override boolean overloadConfig() {return loadConfig("client");}
-            @Override void requestPicture(String timestamp) {
-                if (!showImage(timestamp, false)) request(RequestImage, timestamp);
+            @Override void requestPicture(String stamp, String type) {
+                if (!showImage(stamp, "cache", false)) request(RequestImage, stamp, type);
             }
             @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
@@ -121,8 +121,10 @@ public class ClientArcane {
                     switch (message.type) {
                         case '/' -> execute(message);
                         case ':' -> shell.println(message, false);
-                        case '_' -> shell.printlnLink(message, false);
-                        case 'i' -> shell.save_and_show(message.image, message.words[0]);
+                        case '.' -> shell.println(message, true);
+                        case '_' -> shell.printLinkLines(message, false);
+                        case '=' -> shell.printSharedLinks(message);
+                        case 'i' -> shell.save_and_show(message.image, message.words[0].split(" ")[0]);
                     }
                 }
                 listener.close();
@@ -130,6 +132,7 @@ public class ClientArcane {
                 clientSocket.close();
             } catch (IOException e) {
                 shell.printlnException("连接已丢失：", e);
+                EarClose();
             }
         });
         Ear.start();
@@ -160,7 +163,7 @@ public class ClientArcane {
      */
     private void command(String M) throws IOException {
         String[] cmd = M.split(" ");
-        switch (cmd[0]) {
+        switch (cmd[0].toLowerCase()) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> {
                 shell.print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", NightShell.SOFT_WHITE, true);
@@ -192,6 +195,7 @@ public class ClientArcane {
                 } else {shell.setDefaultFont(); shell.print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
             }
             case NightShell.SendPicture -> sendPicture();
+            case NightShell.RequestSharedP -> request(NightShell.RequestSharedP);
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
     }
@@ -201,8 +205,8 @@ public class ClientArcane {
      */
     private void request(String order, String... args) {
         switch (order) {
-            case NightShell.JoinRequest, NightShell.TALK, NightShell.RequestImage -> report(NightShell.newOrder(order, args[0]));
-            case NightShell.ReColor -> report(NightShell.newOrder(order, args[0]+" "+args[1]));
+            case NightShell.JoinRequest, NightShell.TALK -> report(NightShell.newOrder(order, args[0]));
+            case NightShell.ReColor, NightShell.RequestImage -> report(NightShell.newOrder(order, args[0]+" "+args[1]));
             default -> report(NightShell.newOrder(order, 0));
         }
     }
@@ -241,6 +245,7 @@ public class ClientArcane {
                 /L    成员列表
                 /E    退出房间
                 /P    发送图片
+                /R    拉取共享资源
                 /C    清空提示字
                 /ref  重设显示字体
                 /rec  自定义特征色

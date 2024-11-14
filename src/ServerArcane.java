@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ArcaneRealm v1.6: Server
+ * ArcaneRealm: Server
  * by PaperFish, from 2024.11
  */
 public class ServerArcane {
@@ -31,7 +31,7 @@ public class ServerArcane {
                 } super.processWindowEvent(e);
             }
             @Override boolean overloadConfig() {return loadConfig("server");}
-            @Override void requestPicture(String timestamp) {showImage(timestamp, true);}
+            @Override void requestPicture(String stamp, String type) {showImage(stamp, type, true);}
             @Override void EnterInput() {super.EnterInput(); if (setPort()) say(input);}
             @Override boolean setPort() {
                 if (host.isBlank()) return false;
@@ -159,14 +159,14 @@ public class ServerArcane {
     private synchronized void broadcast(NightShell.Message message) {tellAll(message); shell.println(message, false);}
     private synchronized void broadcastT(NightShell.Message message) {tellAll(message); shell.print(message, false); shell.printlnTime();}
     private synchronized void broadcastT(String words, Object objects, Color colors) {broadcastT(NightShell.newNotice(words, objects, colors));}
-    private synchronized void broadcastLink(NightShell.Message message) {tellAll(message); shell.printlnLink(message, true);}
+    private synchronized void broadcastLink(NightShell.Message message) {tellAll(message); shell.printLinkLines(message, true);}
 
     /**
      * 执行服务器指令
      */
     private void command(String M) throws IOException {
         String[] cmd = M.split(" ");
-        switch (cmd[0]) {
+        switch (cmd[0].toLowerCase()) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> {
                 shell.print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", NightShell.SOFT_WHITE, true);
@@ -184,8 +184,16 @@ public class ServerArcane {
             case NightShell.AllowNewClient -> {allowNewClient = true; broadcastT("讨论间现在%o新成员加入", "允许", NightShell.LIGHT_GREEN);}
             case NightShell.TerminalSys -> {
                 broadcastT("服务器%o了讨论间", "关闭", NightShell.DARK_RED);
-                orderAll(NightShell.TerminalSys);
-                END = true;
+                orderAll(NightShell.TerminalSys); END = true;
+            }
+            case NightShell.SharePicture -> {
+                if (cmd.length == 3) {shell.shareImage(cmd[2], (cmd[1].equals(".")) ? cmd[2] : cmd[1]);
+                } else shell.print("未知指令，用法：/S [name] [timestamp]，其中timestamp为图片时间戳，name为给图片所赋名（使用'.'按时间戳赋名）\n", true);
+            }
+            case NightShell.RequestSharedP -> {
+                NightShell.Message m = shell.sharedLinks();
+                if (m.type == '=') shell.printSharedLinks(m);
+                else shell.println(m, true);
             }
             case NightShell.RenameRoom -> {
                 if (cmd.length == 2) {
@@ -193,7 +201,7 @@ public class ServerArcane {
                     broadcastT("房间名已更新为[%o]", roomName, NightShell.SOFT_WHITE);
                     updateParaText();
                 } else if (cmd.length > 2) shell.print("房间名不能包含空格\n", true);
-                else shell.print("未知指令，用法：/RN <name>\n", true);
+                else shell.print("未知指令，用法：/RN [name]\n", true);
             }
             case NightShell.ReColor -> {
                 if (cmd.length == 3) {
@@ -227,7 +235,7 @@ public class ServerArcane {
                             return;
                         }
                     shell.print("未找到名为[%o]的成员\n", cmd[1], NightShell.LIGHT_GREY, true);
-                } else shell.print("未知指令，用法：/E <member>\n", true);
+                } else shell.print("未知指令，用法：/E [member]\n", true);
             }
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
@@ -259,7 +267,8 @@ public class ServerArcane {
                             NightShell.newNotice("(%o)]已变更特征色", C.name, C.minorColor)));
                 }
                 case NightShell.RequestImage -> {
-                    BufferedImage image = shell.imageOf(M.words[1]);
+                    String[] stamp_type = M.words[1].split(" ");
+                    BufferedImage image = shell.imageOf(stamp_type[0], stamp_type[1]);
                     if (image != null) tell(C, NightShell.newImage(image, M.words[1]));
                     else tell(C, NightShell.newOrder(NightShell.ResourceLoss, 0));
                 }
@@ -268,7 +277,7 @@ public class ServerArcane {
         } else if (M.type == 'i') {
             String timestamp = NightShell.nowTime(false);
             shell.saveImage_auto(M.image, timestamp);
-            broadcastLink(NightShell.newLinkOfPicture(timestamp, C.name, C.mainColor, C.minorColor));
+            broadcastLink(NightShell.newLink(timestamp, C.name, C.mainColor, C.minorColor));
         }
     }
 
@@ -281,6 +290,7 @@ public class ServerArcane {
             case NightShell.JoinReject, NightShell.UnusableName,
                     NightShell.INFO -> tell(C, NightShell.newOrder(order, args[0]));
             case NightShell.UpdateTitle -> tell(C, NightShell.newOrder(order, roomName+" "+clientAntennas.size()));
+            case NightShell.RequestSharedP -> tell(C, shell.sharedLinks());
             default -> tell(C, NightShell.newOrder(order, 0));
         }
     }
@@ -295,7 +305,7 @@ public class ServerArcane {
     }
     private synchronized NightShell.Message getMemberList(boolean withIPv4) {
         int n = clientAntennas.size();
-        if (n == 0) return NightShell.newWhisper("暂无成员");
+        if (n == 0) return NightShell.newHint("暂无成员");
         NightShell.Message m = NightShell.newN(3*n+3);
         m.colors[0] = NightShell.SOFT_GREY;     m.words[0] = "当前共有";
         m.colors[1] = NightShell.LIGHT_GREY;    m.words[1] = String.valueOf(n);
@@ -389,6 +399,8 @@ public class ServerArcane {
                 /T                 关闭服务器
                 /L                 成员列表
                 /C                 清空提示字
+                /S                 将图片加入共享
+                /R                 共享资源列表
                 /ref              重设显示字体
                 /rec              自定义特征色
                 /color           查看色彩规范
