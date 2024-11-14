@@ -178,6 +178,7 @@ public class ServerArcane {
             case NightShell.MemberList -> shell.println(getMemberList(true), true);
             case NightShell.HostPort -> shell.println(getHostPort(), true);
             case NightShell.ClearWhisper -> shell.clearWhisper();
+            case NightShell.LockDisplay -> shell.switchLockDisplay();
             case NightShell.BanTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
             case NightShell.AllowTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
@@ -405,6 +406,7 @@ public class ServerArcane {
                 /rec              自定义特征色
                 /color           查看色彩规范
                 /host            查看地址与端口号
+                /ld              锁定屏幕不随聊天滚动/解锁
                 /bth(/ath)     禁止/允许成员选中文本
                 /bnc(/anc)    禁止/允许新成员加入
                 /E [member] 将成员请出房间
