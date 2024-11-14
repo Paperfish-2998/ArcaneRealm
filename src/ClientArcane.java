@@ -173,7 +173,6 @@ public class ClientArcane {
                 shell.print("MinorColor[%o]在宾格上使用\n", "成员名", NightShell.DARK_AQUA, true);
             }
             case NightShell.ClearWhisper -> shell.clearWhisper();
-            case NightShell.LockDisplay -> shell.switchLockDisplay();
             case NightShell.MemberList, NightShell.HostPort -> request(M);
             case NightShell.ExitSys -> {
                 request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
@@ -251,7 +250,6 @@ public class ClientArcane {
                 /ref  重设显示字体
                 /rec  自定义特征色
                 /color 查看色彩规范
-                /ld   锁定屏幕不随聊天滚动/解锁
                 /host 查看地址与端口号
                 """;
 
