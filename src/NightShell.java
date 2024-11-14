@@ -4,8 +4,6 @@ import com.google.gson.reflect.TypeToken;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.event.MouseInputAdapter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.ColorUIResource;
@@ -20,6 +18,7 @@ import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -27,7 +26,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 //todo 服务器断线自动重连
 /**
- * Night Shell v2.9 <br/>
+ * Night Shell <br/>
  * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
@@ -62,14 +61,14 @@ public class NightShell extends JFrame {
             @Override public void mouseClicked(MouseEvent e) {
                 int clickOffset = displayArea.viewToModel2D(e.getPoint());
                 for (LinkInfo link : links) {
-                    if (clickOffset >= link.start && clickOffset <= link.end) {
-                        requestPicture(link.timestamp); return;
+                    if (clickOffset >= link.start && clickOffset <= link.start+link.length) {
+                        requestPicture(link.stamp, link.type); repaintLink(link); return;
             }}}
         });
         if (overloadConfig()) setVisible(true);
         else System.exit(0);
     }
-    void requestPicture(String timestamp) {}
+    void requestPicture(String stamp, String type) {}
 
     private void addDocListeners() {
         inputArea.addKeyListener(new KeyAdapter() {
@@ -87,19 +86,15 @@ public class NightShell extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_SHIFT) SHIFT = false;
             }
         });
-        displayArea.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) {scrollToBottom();}
-            @Override public void removeUpdate(DocumentEvent e) {scrollToBottom();}
-            @Override public void changedUpdate(DocumentEvent e) {scrollToBottom();}
-        });
     }
     boolean SHIFT = false;
 
     void EnterInput() {input = inputArea.getText().trim(); inputArea.setText("");}
     String input = null;
 
-    private void scrollToBottom() {
-        SwingUtilities.invokeLater(() -> displayArea.setCaretPosition(displayArea.getDocument().getLength()));
+    boolean lockDisplay = false;
+    public void switchLockDisplay() {
+        lockDisplay = !lockDisplay; print("屏幕已" + ((lockDisplay)?"锁定\n":"解锁\n"), true);
     }
 
     private void addTextPane(JTextPane TP, boolean editable, Color BgC, String BL) {
@@ -146,7 +141,7 @@ public class NightShell extends JFrame {
                     Range range = hintRange.get(i);
                     doc.remove(range.start, range.length);
                     for (LinkInfo link : links)
-                        if (link.start > range.start+range.length)
+                        if (!link.hint && link.start > range.start+range.length)
                             link.move(-range.length);
                     hintRange.remove(i);
                 }
@@ -156,9 +151,15 @@ public class NightShell extends JFrame {
     }
     private final List<LinkInfo> links = new ArrayList<>();
     private static class LinkInfo {
-        int start, end; String timestamp;
-        LinkInfo(int a, int l, String ts) {start = a-l; end = a; timestamp = ts;}
-        public void move(int d) {start+=d; end+=d;}
+        int start, length; String stamp; String type; boolean beenClicked = false; boolean hint;
+        LinkInfo(int a, int l, String ts, String t, boolean h) {start = a-l; length = l; stamp = ts; type=t; hint=h;}
+        public void move(int d) {start += d;}
+    }
+
+    public synchronized void paint(int start, int length, Color color) {
+        SimpleAttributeSet attributes = new SimpleAttributeSet();
+        StyleConstants.setForeground(attributes, color);
+        displayArea.getStyledDocument().setCharacterAttributes(start, length, attributes, false);
     }
 
     public synchronized void print(String string, Color color, boolean isHint) {
@@ -168,8 +169,7 @@ public class NightShell extends JFrame {
                 StyleConstants.setForeground(set, color);
                 Document doc = displayArea.getStyledDocument();
                 doc.insertString(doc.getLength(), string, set);
-                if (isHint) hintRange.add(new Range(doc.getLength(), string.length()));
-            }
+                if (isHint) hintRange.add(new Range(doc.getLength(), string.length()));}
             catch (BadLocationException ignored) {}
             finally {textLock.unlock();}
         });
@@ -188,21 +188,32 @@ public class NightShell extends JFrame {
         print(s, SOFT_GREY, false); print(e.getMessage()+"\n", HARD_RED, false);
     }
 
-    public synchronized void printlnLink(Message message, boolean withTimestamp) {
+    public synchronized void printLinkLines(Message message, boolean withTimestamp) {
         for (int i=0; i<2; i++)
             print(message.words[i], message.colors[i], false);
+        printLink(message.words[2], "[图片]", HARD_PINK, "cache", false);
+        print((withTimestamp ? ("-> " + message.words[2]) : "") + "\n", SOFT_PINK, false);
+    }
+    public synchronized void printSharedLinks(Message message) {
+        print("服务器的共享资源列表：", true);
+        for (String linkName : message.words) printLink(linkName, "["+linkName+"] ", SOFT_PURPLE, "share", true);
+        print("\n", true);
+    }
+    public synchronized void printLink(String stamp, String shown, Color color, String type, boolean isHint) {
         SwingUtilities.invokeLater(() -> {textLock.lock();
+            Document doc = displayArea.getStyledDocument();
             try {
                 SimpleAttributeSet set = new SimpleAttributeSet();
-                StyleConstants.setForeground(set, SOFT_PINK);
-                Document doc = displayArea.getStyledDocument();
-                doc.insertString(doc.getLength(), "[图片]", set);
-                links.add(new LinkInfo(doc.getLength(), 5, message.words[2]));
-            }
+                StyleConstants.setForeground(set, color);
+                doc.insertString(doc.getLength(), shown, set);
+                links.add(new LinkInfo(doc.getLength(), shown.length(), stamp, type, isHint));
+                if (isHint) hintRange.add(new Range(doc.getLength(), shown.length()));}
             catch (BadLocationException ignored) {}
             finally {textLock.unlock();}
         });
-        print((withTimestamp ? ("-" + message.words[2]) : "") + "\n", LIGHT_PINK, false);
+    }
+    private synchronized void repaintLink(LinkInfo link) {
+        if (!link.beenClicked) {link.beenClicked = true; paint(link.start, link.length, DARK_PINK);}
     }
 
     public static class Message implements Serializable {
@@ -223,9 +234,7 @@ public class NightShell extends JFrame {
                 OOS.writeObject(this);
                 OOS.close();
                 return Base64.getEncoder().encodeToString(byteOut.toByteArray());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            } catch (IOException ignored) {}
             return "";
         }
         @Serial private void writeObject(ObjectOutputStream out) throws IOException {
@@ -253,8 +262,11 @@ public class NightShell extends JFrame {
     public static Message newLines(String word, String name, Color main, Color minor) {
         return new Message(':', new String[]{name+" ", nowTime(true)+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
     }
-    public static Message newLinkOfPicture(String timestamp, String name, Color main, Color minor) {
-        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp}, new Color[]{main, minor, SOFT_PINK});
+    public static Message newLink(String timestamp, String name, Color main, Color minor) {
+        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp}, new Color[]{main, minor});
+    }
+    public static Message newShareLinks(String[] stamp) {
+        return new Message('=', stamp, new Color[]{});
     }
     public static Message newNotice(String word) {
         return new Message(':', new String[]{word}, new Color[]{LIGHT_GREY});
@@ -272,6 +284,9 @@ public class NightShell extends JFrame {
         return new Message(':', new String[]{words[0], object.toString(), words[1]},
                 new Color[]{SOFT_GREY, color, SOFT_GREY});
     }
+    public static Message newHint(String word) {
+        return new Message('.', new String[]{word}, new Color[]{SOFT_GREY});
+    }
     public static Message new0() {return new Message(' ', new String[0], new Color[0]);}
     public static Message new1(String word, Color color) {
         return new Message(':', new String[]{word}, new Color[]{color});
@@ -287,8 +302,8 @@ public class NightShell extends JFrame {
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.words)).toArray(String[]::new),
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.colors)).toArray(Color[]::new));
     }
-    public static Message newImage(BufferedImage image, String timestamp) {
-        Message m = new1(timestamp, SOFT_WHITE); m.type = 'i'; m.image = image; return m;
+    public static Message newImage(BufferedImage image, String stamp) {
+        Message m = new1(stamp, SOFT_WHITE); m.type = 'i'; m.image = image; return m;
     }
     public Message deserialized(String s) {
         try {
@@ -315,22 +330,26 @@ public class NightShell extends JFrame {
     static final Color LIGHT_GREEN = new Color(30, 231, 140);   // Notice Accept
     static final Color LIGHT_AQUA = new Color(65, 204, 255);
     static final Color DARK_AQUA = new Color(12, 142, 190);
+    static final Color SOFT_PURPLE = new Color(166, 93, 255);
     static final Color LIGHT_ORANGE = new Color(255, 193, 78, 255);
     static final Color DARK_ORANGE = new Color(199, 134, 14);
-    static final Color SOFT_PINK = new Color(255, 177, 200);
-    static final Color LIGHT_PINK = new Color(204, 183, 188);
+    static final Color HARD_PINK = new Color(255, 140, 174);
+    static final Color SOFT_PINK = new Color(187, 144, 211);
+    static final Color DARK_PINK = new Color(138, 69, 90);
     static final Color SOFT_RED = new Color(253, 105, 97);      // Notice Reject
     static final Color HARD_RED = new Color(215, 13, 0);        // System Error/Exception
     static final Color DARK_RED = new Color(159, 8, 0);         // System Deny
 
-    static final String Help = "/H";
-    static final String ExitSys = "/E";
-    static final String EjectOne = "/E";
-    static final String TerminalSys = "/T";
-    static final String MemberList = "/L";
-    static final String SendPicture = "/P";
-    static final String ClearWhisper = "/C";
-    static final String RenameRoom = "/RN";
+    static final String Help = "/h";
+    static final String ExitSys = "/e";
+    static final String EjectOne = "/e";
+    static final String TerminalSys = "/t";
+    static final String MemberList = "/l";
+    static final String SendPicture = "/p";
+    static final String ClearWhisper = "/c";
+    static final String SharePicture = "/s";
+    static final String RequestSharedP = "/r";
+    static final String RenameRoom = "/rn";
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
     static final String ReColor = "/rec";
@@ -339,6 +358,7 @@ public class NightShell extends JFrame {
     static final String AllowTextHighlight = "/ath";
     static final String BanNewClient = "/bnc";
     static final String AllowNewClient = "/anc";
+    static final String LockDisplay = "/ld";
     static final String GuestIPv4 = "guest_ipv4";
     static final String JoinRequest = "join_request";
     static final String JoinReject = "join_reject";
@@ -499,9 +519,9 @@ public class NightShell extends JFrame {
         } catch (IOException e) {if (showError) jErrorDialog(null, "图像文件已损坏", "读取失败");
         } return null;
     }
-    public BufferedImage imageOf(String timestamp) {return imageOf(config.get("cache") + timestamp + ".png", false);}
-    public void saveImage_auto(BufferedImage image, String timestamp) {
-        File file = new File(config.get("cache") + timestamp + ".png");
+    public BufferedImage imageOf(String stamp, String type) {return imageOf(getImagePathIn(stamp, type), false);}
+    public void saveImage_auto(BufferedImage image, String stamp) {
+        File file = new File(getImagePathIn(stamp, "cache"));
         try {if (!ImageIO.write(image, "png", file)) jErrorDialog(this, "保存失败，cache目录下已存在相同时间戳的资源", "Error");
         } catch (IOException e) {jErrorDialog(this, "保存失败："+e.getMessage(), "Error");}
     }
@@ -534,14 +554,29 @@ public class NightShell extends JFrame {
             }
         } catch (IOException e) {jErrorDialog(null, "查看图片时出错："+e.getMessage(), "查看失败");}
     }
-    public boolean showImage(String timestamp, boolean showError) {
-        String path = config.get("cache")+ timestamp + ".png";
+    public boolean showImage(String stamp, String type, boolean showError) {
+        String path = getImagePathIn(stamp, type);
         if (new File(path).exists()) {showImageOf(path); return true;}
         else if (showError) jErrorDialog(null, "未找到图片资源于："+path, "查看失败"); return false;
     }
-    public void save_and_show(BufferedImage image, String timestamp) {
-        saveImage_auto(image, timestamp);
-        showImage(timestamp, true);
+    public void save_and_show(BufferedImage image, String stamp) {
+        saveImage_auto(image, stamp);
+        showImage(stamp, "cache", true);
+    }
+    public String getImagePathIn(String stamp, String location) {return config.get(location) + stamp + ".png";}
+
+    public void shareImage(String timestamp, String name) {
+        String imagePathInCache = getImagePathIn(timestamp, "cache");
+        if (new File(imagePathInCache).exists()) {
+            String dp = copyFile(imagePathInCache, getImagePathIn(name, "share"));
+            if (!dp.isEmpty()) print("成功添加"+timestamp+"名以%o到分享\n", name, LIGHT_GREY, true);
+        } else print("错误的时间戳\n", SOFT_RED, true);
+    }
+    public String copyFile(String sourcePath, String destinationPath) {
+        String dp = destinationPath; int i = 0;
+        while (new File(destinationPath).exists()) dp = dp.replace(".png", "")+"("+(++i)+")"+".png";
+        try {Files.copy(Path.of(sourcePath), Path.of(dp)); return dp;
+        } catch (IOException e) {printlnException("文件复制失败：", e); return "";}
     }
 
     public int jConfirmDialog(Component MF, String message, String title) {
@@ -551,6 +586,16 @@ public class NightShell extends JFrame {
         JOptionPane.showMessageDialog(MF, message, title, JOptionPane.ERROR_MESSAGE);
     }
 
+    public synchronized NightShell.Message sharedLinks() {
+        List<String> names = new ArrayList<>();
+        File[] files = new File(config.get("share")).listFiles();
+        if (files != null)
+            for (File f : files) {String n = f.getName();
+                if (n.endsWith(".png"))
+                    names.add(n.replace(".png", ""));}
+        return (names.isEmpty()) ? newHint("服务器暂无共享资源") : newShareLinks(names.toArray(new String[0]));
+    }
+
     private Map<String, String> config = new HashMap<>();
     boolean overloadConfig() {return loadConfig("0");}
     boolean loadConfig(String ter) {
@@ -558,15 +603,24 @@ public class NightShell extends JFrame {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         if (new File(configPath).exists()) {
             try (Reader reader = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
-                config = gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType()); return true;
+                config = gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType());
             } catch (Exception e) {jErrorDialog(null, "读取配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
         } else {
             config.put("cache", "./cache/"+ter+"/");
             config.put("upload", "");
+            if ("server".equals(ter)) config.put("share", "./resource/share");
             try (FileWriter writer = new FileWriter(configPath)) {
-                gson.toJson(config, writer); return true;
+                gson.toJson(config, writer);
             } catch (Exception e) {jErrorDialog(null, "创建配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
         }
+        return !(cannotCreateFolder(config.get("cache")) | ("server".equals(ter) && cannotCreateFolder(config.get("share"))));
+    }
+
+    private boolean cannotCreateFolder(String path) {
+        File bank = new File(path);
+        if (!bank.exists() && !bank.mkdirs()) {
+            jErrorDialog(null, "程序无法运行，未知原因无法创建默认目录："+path, "Error"); return true;
+        } return false;
     }
 
     public static void doNothing() {}
