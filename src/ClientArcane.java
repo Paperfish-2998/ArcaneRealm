@@ -8,7 +8,7 @@ import java.net.SocketException;
 
 /**
  * ArcaneRealm v1.6: Client
- * by PaperFish, 2024.11.13
+ * by PaperFish, from 2024.11
  */
 public class ClientArcane {
     private Socket clientSocket;
@@ -31,7 +31,10 @@ public class ClientArcane {
                         say(ExitSys);}
                 } super.processWindowEvent(e);
             }
-            @Override void sendPictureRequirement(String timestamp) {request(RequestImage, timestamp);}
+            @Override boolean overloadConfig() {return loadConfig("client");}
+            @Override void requestPicture(String timestamp) {
+                if (!showImage(timestamp, false)) request(RequestImage, timestamp);
+            }
             @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
                 if (guest.isBlank()) return false;
@@ -99,8 +102,7 @@ public class ClientArcane {
         while (name.isBlank()) {try {wait();} catch (InterruptedException e) {e.printStackTrace();}}
         shell.clearWhisper();
         shell.print("已%o到", "连接", NightShell.HARD_GREEN, false);
-        shell.print("位于Ipv4:%o ", host, Color.WHITE, false);
-        shell.print("上的服务器（端口：%o）\n", port, Color.WHITE, false);
+        shell.print("位于Ipv4: %o 上的服务器\n", host+":"+port, Color.WHITE, false);
         shell.print("你已进入讨论间\n\n", false);
         EarMonite();
     }
@@ -120,7 +122,7 @@ public class ClientArcane {
                         case '/' -> execute(message);
                         case ':' -> shell.println(message, false);
                         case '_' -> shell.printlnLink(message, false);
-                        case 'i' -> shell.examineImage(message.image);
+                        case 'i' -> shell.save_and_show(message.image, message.words[0]);
                     }
                 }
                 listener.close();
@@ -216,7 +218,7 @@ public class ClientArcane {
             case NightShell.TerminalSys, NightShell.ExitSys -> {EarClose(); shell.print("失去与服务器的连接\n", false);}
             case NightShell.AllowTextHighlight -> shell.setDisplayHighlightable(true);
             case NightShell.BanTextHighlight -> shell.setDisplayHighlightable(false);
-            case NightShell.ResourceLoss -> shell.jErrorDialog(null, "资源已丢失", "查看失败");
+            case NightShell.ResourceLoss -> shell.jErrorDialog(null, "资源已被清理", "查看失败");
         }
     }
 
@@ -227,10 +229,10 @@ public class ClientArcane {
 
     private void sendPicture() {
         String path;
-        while ((path = shell.chooseImage()).isEmpty()) NightShell.doNothing();
+        while ((path = shell.chooseImage_manual()).isEmpty()) NightShell.doNothing();
         if (!path.equals("0")) {
-            BufferedImage image = shell.imageOf(path);
-            if (image != null) report(NightShell.newImage(image));
+            BufferedImage image = shell.imageOf(path, true);
+            if (image != null) report(NightShell.newImage(image, "0"));
         }
     }
 

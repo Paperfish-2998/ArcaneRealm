@@ -1,3 +1,7 @@
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -15,17 +19,16 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.*;
 import java.util.List;
-
+import java.util.concurrent.locks.ReentrantLock;
+//todo 服务器断线自动重连
 /**
  * Night Shell v2.9 <br/>
- * by PaperFish, 2024.11.13
+ * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
     public static final String VERSION = "Arcane Realm v1.5";
@@ -46,26 +49,27 @@ public class NightShell extends JFrame {
         addTextPane(inputArea, true, HARD_GREY, BorderLayout.SOUTH);
         addDocListeners();
         preconfigure();
-        setVisible(true);
-        print("%o ,by Paperfish\n\n", VERSION, LIGHT_GREY, true);
+        print("%o , by Paperfish\n\n", VERSION, LIGHT_GREY, true);
     }
 
     private void preconfigure() {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
+        } catch (Exception e) {e.printStackTrace();}
         inputArea.setPreferredSize(new Dimension(getWidth(), 48));
         displayArea.addMouseListener(new MouseInputAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
                 int clickOffset = displayArea.viewToModel2D(e.getPoint());
                 for (LinkInfo link : links) {
                     if (clickOffset >= link.start && clickOffset <= link.end) {
-                        sendPictureRequirement(link.timestamp); return;
+                        requestPicture(link.timestamp); return;
             }}}
         });
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
-        } catch (Exception e) {e.printStackTrace();}
+        if (overloadConfig()) setVisible(true);
+        else System.exit(0);
     }
-    void sendPictureRequirement(String timestamp) {}
+    void requestPicture(String timestamp) {}
 
     private void addDocListeners() {
         inputArea.addKeyListener(new KeyAdapter() {
@@ -276,15 +280,15 @@ public class NightShell extends JFrame {
         return new Message(':', new String[N], new Color[N]);
     }
     public static Message newOrder(String key, Object value) {
-        return new Message('/', new String[]{key, value.toString()}, new Color[]{Color.BLACK});
+        return new Message('/', new String[]{key, value.toString()}, new Color[]{SOFT_WHITE});
     }
     public static Message merge(Message... messages) {
         return new Message(messages[0].type,
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.words)).toArray(String[]::new),
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.colors)).toArray(Color[]::new));
     }
-    public static Message newImage(BufferedImage image) {
-        Message m = new0(); m.type = 'i'; m.image = image; return m;
+    public static Message newImage(BufferedImage image, String timestamp) {
+        Message m = new1(timestamp, SOFT_WHITE); m.type = 'i'; m.image = image; return m;
     }
     public Message deserialized(String s) {
         try {
@@ -326,7 +330,6 @@ public class NightShell extends JFrame {
     static final String MemberList = "/L";
     static final String SendPicture = "/P";
     static final String ClearWhisper = "/C";
-    static final String ClearImageCache = "/cli";
     static final String RenameRoom = "/RN";
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
@@ -349,7 +352,7 @@ public class NightShell extends JFrame {
 
     public static String nowTime(boolean normative) {
         if (normative) return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        else return LocalDateTime.now().toString();
+        else return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSSS"));
     }
     public static Color hexColor(String hexadecimal) {
         if (hexadecimal.length() == 8 && hexadecimal.matches("[#0-9a-fA-F]+")) {
@@ -491,43 +494,20 @@ public class NightShell extends JFrame {
                 .orElse(null);
     }
 
-    public static class ImageDisplay extends JFrame {
-        private final BufferedImage image;
-        public ImageDisplay(BufferedImage image) {
-            this.image = image;
-            setSize(image.getWidth(), image.getHeight());
-            setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-            setLocationRelativeTo(null);
-        }
-        @Override public void paint(Graphics g) {
-            super.paint(g); if (image != null) g.drawImage(image, 0, 0, this);
-        }
-    }
-    public BufferedImage imageOf(String path) {
+    public BufferedImage imageOf(String path, boolean showError) {
         try {return ImageIO.read(new File(path));
-        } catch (IOException e) {jErrorDialog(null, "图像文件已损坏", "读取失败");
+        } catch (IOException e) {if (showError) jErrorDialog(null, "图像文件已损坏", "读取失败");
         } return null;
     }
-    public void showImage(BufferedImage image) {SwingUtilities.invokeLater(() -> new ImageDisplay(image).setVisible(true));}
-    public void saveImage(BufferedImage image) {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setFileFilter(new FileNameExtensionFilter("PNG Images", "png"));
-        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            int i = 0;
-            try {File file = chooser.getSelectedFile();
-                String rowName = file.getName().replace(".png", "");
-                file = new File(file.getParent(), rowName + ".png");
-                while(file.exists()) file = new File(file.getParent(), rowName+"("+(++i)+")"+".png");
-                if (ImageIO.write(image, "png", file))
-                    jInformationDialog(this, "成功保存到：" + file.getName(), "Done!");
-                else jErrorDialog(this, "保存失败", "Error");
-            } catch (IOException e) {
-                jErrorDialog(this, "保存失败："+e.getMessage(), "Error");
-            }
-        }
+    public BufferedImage imageOf(String timestamp) {return imageOf(config.get("cache") + timestamp + ".png", false);}
+    public void saveImage_auto(BufferedImage image, String timestamp) {
+        File file = new File(config.get("cache") + timestamp + ".png");
+        try {if (!ImageIO.write(image, "png", file)) jErrorDialog(this, "保存失败，cache目录下已存在相同时间戳的资源", "Error");
+        } catch (IOException e) {jErrorDialog(this, "保存失败："+e.getMessage(), "Error");}
     }
-    public String chooseImage() {
-        JFileChooser chooser = new JFileChooser();
+
+    public String chooseImage_manual() {
+        JFileChooser chooser = new JFileChooser(config.get("upload"));
         chooser.setFileFilter(new FileNameExtensionFilter("PNG Images", "png"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             String path = chooser.getSelectedFile().getAbsolutePath();
@@ -535,25 +515,58 @@ public class NightShell extends JFrame {
             else {jErrorDialog(this, "请上传png格式的图片", "格式错误"); return "";}
         } return "0";
     }
-    public void examineImage(BufferedImage image) {
-        switch (triadsChooseDialog(this, "请选择对图片进行：", "Choose", new String[]{"查看", "保存", "取消"})) {
-            case 0 -> showImage(image);
-            case 1 -> saveImage(image);
-        }
+
+    /**
+     * 使用系统的默认图片查看器来查看图片：<br/>
+     * Windows系统使用explorer打开图片，<br/>
+     * Unix-like系统（包括Linux和macOS）使用xdg-open或open打开图片（注意：xdg-open在大多数Linux发行版上可用，但macOS应该使用open）。
+     */
+    public void showImageOf(String imagePath) {
+        String absolute_imagePath = new File(imagePath).getAbsolutePath();
+        try {
+            String os = System.getProperty("os.name").toLowerCase();
+            if (os.contains("win")) {
+                new ProcessBuilder("explorer", absolute_imagePath).start();
+            } else if (os.contains("nix") || os.contains("nux") || os.contains("mac")) {
+                new ProcessBuilder(os.contains("mac") ? "open" : "xdg-open", absolute_imagePath).start();
+            } else {
+                jErrorDialog(null, "未知的操作系统，未能调用图片查看器", "查看失败");
+            }
+        } catch (IOException e) {jErrorDialog(null, "查看图片时出错："+e.getMessage(), "查看失败");}
+    }
+    public boolean showImage(String timestamp, boolean showError) {
+        String path = config.get("cache")+ timestamp + ".png";
+        if (new File(path).exists()) {showImageOf(path); return true;}
+        else if (showError) jErrorDialog(null, "未找到图片资源于："+path, "查看失败"); return false;
+    }
+    public void save_and_show(BufferedImage image, String timestamp) {
+        saveImage_auto(image, timestamp);
+        showImage(timestamp, true);
     }
 
     public int jConfirmDialog(Component MF, String message, String title) {
         return JOptionPane.showConfirmDialog(MF, message, title, JOptionPane.OK_CANCEL_OPTION);
     }
-    public void jInformationDialog(Component MF, String message, String title) {
-        JOptionPane.showMessageDialog(MF, message, title, JOptionPane.INFORMATION_MESSAGE);
-    }
     public void jErrorDialog(Component MF, String message, String title) {
         JOptionPane.showMessageDialog(MF, message, title, JOptionPane.ERROR_MESSAGE);
     }
-    public int triadsChooseDialog(Component MF, String message, String title, String[] options) {
-        return JOptionPane.showOptionDialog(MF, message, title, JOptionPane.YES_NO_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+
+    private Map<String, String> config = new HashMap<>();
+    boolean overloadConfig() {return loadConfig("0");}
+    boolean loadConfig(String ter) {
+        String configPath = "./config/" + ter + ".json";
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        if (new File(configPath).exists()) {
+            try (Reader reader = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
+                config = gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType()); return true;
+            } catch (Exception e) {jErrorDialog(null, "读取配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
+        } else {
+            config.put("cache", "./cache/"+ter+"/");
+            config.put("upload", "");
+            try (FileWriter writer = new FileWriter(configPath)) {
+                gson.toJson(config, writer); return true;
+            } catch (Exception e) {jErrorDialog(null, "创建配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
+        }
     }
 
     public static void doNothing() {}

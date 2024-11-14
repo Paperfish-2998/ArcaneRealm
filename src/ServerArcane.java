@@ -4,13 +4,11 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * ArcaneRealm v1.6: Server
- * by PaperFish, 2024.11.13
+ * by PaperFish, from 2024.11
  */
 public class ServerArcane {
     private ServerSocket serverSocket;
@@ -32,10 +30,8 @@ public class ServerArcane {
                     say(TerminalSys);
                 } super.processWindowEvent(e);
             }
-            @Override void sendPictureRequirement(String timestamp) {
-                BufferedImage image = timestamp_image.get(timestamp);
-                if (image != null) shell.examineImage(image);
-                else jErrorDialog(null, "资源已被清理", "查看失败");}
+            @Override boolean overloadConfig() {return loadConfig("server");}
+            @Override void requestPicture(String timestamp) {showImage(timestamp, true);}
             @Override void EnterInput() {super.EnterInput(); if (setPort()) say(input);}
             @Override boolean setPort() {
                 if (host.isBlank()) return false;
@@ -182,7 +178,6 @@ public class ServerArcane {
             case NightShell.MemberList -> shell.println(getMemberList(true), true);
             case NightShell.HostPort -> shell.println(getHostPort(), true);
             case NightShell.ClearWhisper -> shell.clearWhisper();
-            case NightShell.ClearImageCache -> {timestamp_image.clear(); broadcastT("服务器已%o图片缓存", "清理", NightShell.SOFT_RED);}
             case NightShell.BanTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
             case NightShell.AllowTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
@@ -264,20 +259,19 @@ public class ServerArcane {
                             NightShell.newNotice("(%o)]已变更特征色", C.name, C.minorColor)));
                 }
                 case NightShell.RequestImage -> {
-                    BufferedImage image = timestamp_image.get(M.words[1]);
-                    if (image != null) tell(C, NightShell.newImage(image));
+                    BufferedImage image = shell.imageOf(M.words[1]);
+                    if (image != null) tell(C, NightShell.newImage(image, M.words[1]));
                     else tell(C, NightShell.newOrder(NightShell.ResourceLoss, 0));
                 }
                 default -> order(C, K);
             }
         } else if (M.type == 'i') {
             String timestamp = NightShell.nowTime(false);
-            timestamp_image.put(timestamp, M.image);
+            shell.saveImage_auto(M.image, timestamp);
             broadcastLink(NightShell.newLinkOfPicture(timestamp, C.name, C.mainColor, C.minorColor));
         }
     }
 
-    private final Map<String, BufferedImage> timestamp_image = new HashMap<>();
 
     /**
      * 向客户端发送指示 -> ClientArcane.execute()
@@ -395,7 +389,6 @@ public class ServerArcane {
                 /T                 关闭服务器
                 /L                 成员列表
                 /C                 清空提示字
-                /cli              清除图片缓存
                 /ref              重设显示字体
                 /rec              自定义特征色
                 /color           查看色彩规范
