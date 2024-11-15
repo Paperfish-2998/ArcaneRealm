@@ -3,6 +3,7 @@
     <output-path>$PROJECT_DIR$/out/artifacts/ArcaneRealm_jar</output-path>
     <root id="archive" name="ArcaneRealm.jar">
       <element id="module-output" name="ArcaneRealm" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/google-gson-2.2.4.jar" path-in-jar="/" />
     </root>
   </artifact>
 </component>

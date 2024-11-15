@@ -25,12 +25,13 @@ import java.util.*;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
+//todo 传输压缩文件
 /**
  * Night Shell <br/>
  * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
-    public static final String VERSION = "Arcane Realm v1.5";
+    public static final String VERSION = "Arcane Realm v1.8";
     private final ReentrantLock textLock = new ReentrantLock();
     private final JLabel titleLabel = new JLabel();
     private final JTextPane displayArea = new JTextPane();
@@ -508,16 +509,52 @@ public class NightShell extends JFrame {
                 .orElse(null);
     }
 
+    public void printColorSpecification() {
+        print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", NightShell.SOFT_WHITE, true);
+        print("以%o为主的信息：所有人都可见的系统告示\n", "浅灰", NightShell.LIGHT_GREY, true);
+        print("以%o为主的信息：仅你自己可见的系统提示\n", "深灰", NightShell.SOFT_GREY, true);
+        print("成员有两个特征色彩：\nMainColor[%o]在主格上使用\n", "成员名", NightShell.LIGHT_AQUA, true);
+        print("MinorColor[%o]在宾格上使用\n", "成员名", NightShell.DARK_AQUA, true);
+    }
+    public Color[] resetTheColor(String[] cmd) {
+        if (cmd.length == 3) {
+            Color main, minor;
+            if ((main = NightShell.hexColor(cmd[1])) != null && (minor = NightShell.hexColor(cmd[2])) != null) {
+                return new Color[]{main, minor};
+            } else print("错误的格式，示例：/rec 41CCFFFF 0C8EBEFF\n", true);
+        } else print("用法（十六进制颜色码）：/rec [MainColor] [MinorColor]\n", true);
+        return null;
+    }
+    public void resetTheFont(String[] cmd) {
+        if (cmd.length == 3) {
+            String type; int size;
+            if (!(type = cmd[1]).isBlank() && cmd[2].matches("[0-9]+") && cmd[2].length() < 4) {
+                size = Integer.parseInt(cmd[2]);
+                print("当前字体已变更为：%o\n", setFont(type, size), NightShell.SOFT_GREY, true);
+            } else print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
+        } else {setDefaultFont(); print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
+    }
+    public void sharePicture(String[] cmd) {
+        if (cmd.length == 3) {shareImage(cmd[2], (cmd[1].equals(".")) ? cmd[2] : cmd[1]);
+        } else print("未知指令，用法：/S [name] [timestamp]，其中timestamp为图片时间戳，name为给图片所赋名（使用'.'按时间戳赋名）\n", true);
+    }
+    public void requestSharedPictures(String[] cmd) {
+        NightShell.Message m = sharedLinks();
+        if (m.type == '=') printSharedLinks(m);
+        else println(m, true);
+    }
+
     public BufferedImage imageOf(String path, boolean showError) {
         try {return ImageIO.read(new File(path));
-        } catch (IOException e) {if (showError) jErrorDialog(null, "图像文件已损坏", "读取失败");
+        } catch (IOException e) {if (showError) jErrorDialog(null, prompt.get("FileCorrupted"));
         } return null;
     }
     public BufferedImage imageOf(String stamp, String type) {return imageOf(getImagePathIn(stamp, type), false);}
+
     public void saveImage_auto(BufferedImage image, String stamp) {
         File file = new File(getImagePathIn(stamp, "cache"));
-        try {if (!ImageIO.write(image, "png", file)) jErrorDialog(this, "保存失败，cache目录下已存在相同时间戳的资源", "Error");
-        } catch (IOException e) {jErrorDialog(this, "保存失败："+e.getMessage(), "Error");}
+        try {if (!ImageIO.write(image, "png", file)) jErrorDialog(this, prompt.get("FailToSave")+prompt.get("DuplicateTSResources"));
+        } catch (IOException e) {jErrorDialog(this, prompt.get("FailToSave")+e.getMessage());}
     }
 
     public String chooseImage_manual() {
@@ -526,7 +563,7 @@ public class NightShell extends JFrame {
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             String path = chooser.getSelectedFile().getAbsolutePath();
             if (path.endsWith(".png") && new File(path).exists()) return path;
-            else {jErrorDialog(this, "请上传png格式的图片", "格式错误"); return "";}
+            else {jErrorDialog(this, prompt.get("FailToUpload")+prompt.get("RequirePNG")); return "";}
         } return "0";
     }
 
@@ -544,14 +581,14 @@ public class NightShell extends JFrame {
             } else if (os.contains("nix") || os.contains("nux") || os.contains("mac")) {
                 new ProcessBuilder(os.contains("mac") ? "open" : "xdg-open", absolute_imagePath).start();
             } else {
-                jErrorDialog(null, "未知的操作系统，未能调用图片查看器", "查看失败");
+                jErrorDialog(null, prompt.get("FailToView")+prompt.get("UnKnownSysToCallViewer"));
             }
-        } catch (IOException e) {jErrorDialog(null, "查看图片时出错："+e.getMessage(), "查看失败");}
+        } catch (IOException e) {jErrorDialog(null, prompt.get("FailToView")+prompt.get("ErrorViewingImage")+e.getMessage());}
     }
     public boolean showImage(String stamp, String type, boolean showError) {
         String path = getImagePathIn(stamp, type);
         if (new File(path).exists()) {showImageOf(path); return true;}
-        else if (showError) jErrorDialog(null, "未找到图片资源于："+path, "查看失败"); return false;
+        else if (showError) jErrorDialog(null, prompt.get("ImageNotFoundIn")+path); return false;
     }
     public void save_and_show(BufferedImage image, String stamp) {
         saveImage_auto(image, stamp);
@@ -573,11 +610,11 @@ public class NightShell extends JFrame {
         } catch (IOException e) {printlnException("文件复制失败：", e); return "";}
     }
 
-    public int jConfirmDialog(Component MF, String message, String title) {
-        return JOptionPane.showConfirmDialog(MF, message, title, JOptionPane.OK_CANCEL_OPTION);
+    public int jConfirmDialog(Component MF, String text, String title) {
+        return JOptionPane.showConfirmDialog(MF, text, title, JOptionPane.OK_CANCEL_OPTION);
     }
-    public void jErrorDialog(Component MF, String message, String title) {
-        JOptionPane.showMessageDialog(MF, message, title, JOptionPane.ERROR_MESSAGE);
+    public void jErrorDialog(Component MF, String text) {
+        JOptionPane.showMessageDialog(MF, text, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
     public synchronized NightShell.Message sharedLinks() {
@@ -590,34 +627,43 @@ public class NightShell extends JFrame {
         return (names.isEmpty()) ? newHint("服务器暂无共享资源") : newShareLinks(names.toArray(new String[0]));
     }
 
+    Map<String, String> prompt = new HashMap<>();
     private Map<String, String> config = new HashMap<>();
     boolean overloadConfig() {return loadConfig("0");}
     boolean loadConfig(String ter) {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        String promptPath = "./config/prompt.json";
+        if (!new File(promptPath).exists()) {jErrorDialog(null, "File "+promptPath+" not found"); return false;}
+        if ((prompt = json2map(gson, promptPath)) == null) return false;
+
         String configPath = "./config/" + ter + ".json";
         File configFile = new File(configPath);
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
         if (configFile.exists()) {
-            try (Reader reader = new InputStreamReader(new FileInputStream(configPath), StandardCharsets.UTF_8)) {
-                config = gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType());
-            } catch (Exception e) {jErrorDialog(null, "读取配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
+            if ((config = json2map(gson, configPath)) == null) return false;
         } else {
             config.put("cache", "./cache/"+ter+"/");
             config.put("upload", "");
             if ("server".equals(ter)) config.put("share", "./resource/share");
             try {if (new File(configFile.getParent()).mkdirs() && !configFile.createNewFile()) {
-                jErrorDialog(null, "程序无法运行，未知原因无法创建配置文件："+configPath, "Error"); return false;}
+                jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateConfigFileIn")+configPath); return false;}
                 try (FileWriter writer = new FileWriter(configPath)) {
                     gson.toJson(config, writer);
                 }
-            } catch (Exception e) {jErrorDialog(null, "创建配置文件时出错：\n"+e.getMessage(), "错误"); return false;}
+            } catch (Exception e) {jErrorDialog(null, prompt.get("XProgram")+prompt.get("ErrorCreatingConfigFile")+"\n"+e.getMessage()); return false;}
         }
         return !(cannotCreateFolder(config.get("cache")) | ("server".equals(ter) && cannotCreateFolder(config.get("share"))));
+    }
+
+    private HashMap<String, String> json2map(Gson gson, String path) {
+        try (Reader reader = new InputStreamReader(new FileInputStream(path), StandardCharsets.UTF_8)) {
+            return gson.fromJson(reader, new TypeToken<HashMap<String, String>>(){}.getType());
+        } catch (Exception e) {jErrorDialog(null, prompt.get("XProgram")+prompt.get("ErrorReadingConfigFile")+"\n"+e.getMessage()); return null;}
     }
 
     private boolean cannotCreateFolder(String path) {
         File bank = new File(path);
         if (!bank.exists() && !bank.mkdirs()) {
-            jErrorDialog(null, "程序无法运行，未知原因无法创建默认目录："+path, "Error"); return true;
+            jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateDefaultFolderIn")+path); return true;
         } return false;
     }
 

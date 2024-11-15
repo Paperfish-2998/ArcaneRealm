@@ -27,7 +27,7 @@ public class ClientArcane {
             @Override protected void processWindowEvent(WindowEvent e) {
                 if (e.getID() == WindowEvent.WINDOW_CLOSING) {
                     if (DoEar) {
-                        if (jConfirmDialog(this, "确定要退出讨论间吗？", "EXIT") != 0) return;
+                        if (jConfirmDialog(this, prompt.get("ExitRoom"), "Exit") != 0) return;
                         say(ExitSys);}
                 } super.processWindowEvent(e);
             }
@@ -165,37 +165,17 @@ public class ClientArcane {
         String[] cmd = M.split(" ");
         switch (cmd[0].toLowerCase()) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
-            case NightShell.ColorHint -> {
-                shell.print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", NightShell.SOFT_WHITE, true);
-                shell.print("以%o为主的信息：所有人都可见的系统告示\n", "浅灰", NightShell.LIGHT_GREY, true);
-                shell.print("以%o为主的信息：仅你自己可见的系统提示\n", "深灰", NightShell.SOFT_GREY, true);
-                shell.print("成员有两个特征色彩：\nMainColor[%o]在主格上使用\n", "成员名", NightShell.LIGHT_AQUA, true);
-                shell.print("MinorColor[%o]在宾格上使用\n", "成员名", NightShell.DARK_AQUA, true);
-            }
+            case NightShell.ColorHint -> shell.printColorSpecification();
             case NightShell.ClearWhisper -> shell.clearWhisper();
             case NightShell.MemberList, NightShell.HostPort -> request(M);
+            case NightShell.ReColor -> {if (shell.resetTheColor(cmd) != null) request(NightShell.ReColor, cmd[1], cmd[2]);}
+            case NightShell.ResetFont -> shell.resetTheFont(cmd);
+            case NightShell.SendPicture -> sendPicture();
+            case NightShell.RequestSharedP -> request(NightShell.RequestSharedP);
             case NightShell.ExitSys -> {
                 request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
                 EarClose(); shell.print("已断开与服务器的连接\n", false);
             }
-            case NightShell.ReColor -> {
-                if (cmd.length == 3) {
-                    if (NightShell.hexColor(cmd[1]) != null && NightShell.hexColor(cmd[2]) != null) {
-                        request(NightShell.ReColor, cmd[1], cmd[2]);
-                    } else shell.print("错误的格式，示例：/rec 41CCFFFF 0C8EBEFF\n", true);
-                } else shell.print("用法（十六进制颜色码）：/rec [MainColor] [MinorColor]\n", true);
-            }
-            case NightShell.ResetFont -> {
-                if (cmd.length == 3) {
-                    String type; int size;
-                    if (!(type = cmd[1]).isBlank() && cmd[2].matches("[0-9]+") && cmd[2].length() < 4) {
-                        size = Integer.parseInt(cmd[2]);
-                        shell.print("当前字体已变更为：%o\n", shell.setFont(type, size), NightShell.SOFT_GREY, true);
-                    } else shell.print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
-                } else {shell.setDefaultFont(); shell.print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
-            }
-            case NightShell.SendPicture -> sendPicture();
-            case NightShell.RequestSharedP -> request(NightShell.RequestSharedP);
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
     }
@@ -222,7 +202,7 @@ public class ClientArcane {
             case NightShell.TerminalSys, NightShell.ExitSys -> {EarClose(); shell.print("失去与服务器的连接\n", false);}
             case NightShell.AllowTextHighlight -> shell.setDisplayHighlightable(true);
             case NightShell.BanTextHighlight -> shell.setDisplayHighlightable(false);
-            case NightShell.ResourceLoss -> shell.jErrorDialog(null, "资源已被清理", "查看失败");
+            case NightShell.ResourceLoss -> shell.jErrorDialog(null, shell.prompt.get("ResourceLoss"));
         }
     }
 
