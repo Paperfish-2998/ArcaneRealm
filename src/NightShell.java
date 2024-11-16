@@ -2,16 +2,13 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.event.MouseInputAdapter;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -24,8 +21,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
-//todo 传输压缩文件
+//todo 一键拉取所有资源（通过缓冲池和任务队列实现，不影响聊天）
+//todo 将久远的消息也存到硬盘，不要占用内存
 /**
  * Night Shell <br/>
  * by PaperFish, from 2024.11
@@ -63,13 +62,13 @@ public class NightShell extends JFrame {
                 int clickOffset = displayArea.viewToModel2D(e.getPoint());
                 for (LinkInfo link : links) {
                     if (clickOffset >= link.start && clickOffset <= link.start+link.length) {
-                        requestPicture(link.stamp, link.type); repaintLink(link); return;
+                        requestFile(link.stampx, link.location); repaintLink(link); return;
             }}}
         });
         if (overloadConfig()) setVisible(true);
         else System.exit(0);
     }
-    void requestPicture(String stamp, String type) {}
+    void requestFile(String stampx, String type) {}
 
     private void addDocListeners() {
         inputArea.addKeyListener(new KeyAdapter() {
@@ -97,7 +96,7 @@ public class NightShell extends JFrame {
         TP.setEditable(editable);
         TP.setFont(DEFAULT_FONT);
         TP.setCaretColor(SOFT_WHITE);
-        TP.setForeground(NightShell.SOFT_WHITE);
+        TP.setForeground(SOFT_WHITE);
         TP.setBackground(BgC);
         TP.setEditorKit(new WrapEditorKit());
 
@@ -128,7 +127,7 @@ public class NightShell extends JFrame {
 
     private static class Range {int start, length; public Range(int a, int l) {start = a-l; length = l;}}
     private final List<Range> hintRange = new ArrayList<>();
-    public synchronized void clearWhisper() {
+    public synchronized void clearHint() {
         if (hintRange.isEmpty()) return;
         SwingUtilities.invokeLater(() -> {textLock.lock();
             try {
@@ -136,26 +135,25 @@ public class NightShell extends JFrame {
                 for (int i = hintRange.size()-1; i>=0; i--) {
                     Range range = hintRange.get(i);
                     doc.remove(range.start, range.length);
-                    for (LinkInfo link : links)
-                        if (!link.hint && link.start > range.start+range.length)
-                            link.move(-range.length);
-                    hintRange.remove(i);
-                }
+                    links.forEach(e -> e.tryMove(range.start, range.length));
+                } hintRange.clear();
+                links = links.stream().filter(e -> !e.hint).collect(Collectors.toList());
             } catch (BadLocationException ignored) {
             } finally {textLock.unlock();}
         });
     }
-    private final List<LinkInfo> links = new ArrayList<>();
+    private List<LinkInfo> links = new ArrayList<>();
     private static class LinkInfo {
-        int start, length; String stamp; String type; boolean beenClicked = false; boolean hint;
-        LinkInfo(int a, int l, String ts, String t, boolean h) {start = a-l; length = l; stamp = ts; type=t; hint=h;}
-        public void move(int d) {start += d;}
+        int start, length; String stampx; String location; boolean beenClicked = false; boolean hint;
+        LinkInfo(int a, int l, String sx, String o, boolean h) {start=a-l; length=l; stampx=sx; location=o; hint=h;}
+        public boolean isImage() {return isImageName(stampx);}
+        public void tryMove(int s, int l) {if (!hint && start>s+l) start-=l;}
     }
 
     public synchronized void paint(int start, int length, Color color) {
         SimpleAttributeSet attributes = new SimpleAttributeSet();
         StyleConstants.setForeground(attributes, color);
-        displayArea.getStyledDocument().setCharacterAttributes(start, length, attributes, false);
+        displayArea.getStyledDocument().setCharacterAttributes(start, length, attributes, true);
     }
 
     public synchronized void print(String string, Color color, boolean isHint) {
@@ -175,8 +173,8 @@ public class NightShell extends JFrame {
     }
     public synchronized void println(Message message, boolean isHint) {print(message, isHint); print("\n", LIGHT_GREY, isHint);}
 
-    public synchronized void print(String words, boolean isHint) {print(NightShell.newWhisper(words), isHint);}
-    public synchronized void print(String words, Object objects, Color color, boolean isHint) {print(NightShell.newWhisper(words, objects, color), isHint);}
+    public synchronized void print(String words, boolean isHint) {print(newWhisper(words), isHint);}
+    public synchronized void print(String words, Object objects, Color color, boolean isHint) {print(newWhisper(words, objects, color), isHint);}
 
     public synchronized void printTime(String words) {print(words.replace("%t", nowTime(true)), false);}
     public synchronized void printlnTime() {printTime(" (%t)\n");}
@@ -184,44 +182,44 @@ public class NightShell extends JFrame {
         print(s, SOFT_GREY, false); print(e.getMessage()+"\n", HARD_RED, false);
     }
 
-    public synchronized void printLinkLines(Message message, boolean withTimestamp) {
+    public synchronized void printLinkLines(Message m, boolean withTimestamp) {
         for (int i=0; i<2; i++)
-            print(message.words[i], message.colors[i], false);
-        printLink(message.words[2], "[图片]", HARD_PINK, "cache", false);
-        print((withTimestamp ? ("-> " + message.words[2]) : "") + "\n", SOFT_PINK, false);
+            print(m.words[i], m.colors[i], false);
+        printLink(m.words[2]+m.words[4], m.words[3]+m.words[4], "cache", false);
+        print((withTimestamp ? ("-> " + m.words[2]) : "") + "\n", GREY_BLUE, false);
     }
-    public synchronized void printSharedLinks(Message message) {
-        print("服务器的共享资源列表：", true);
-        for (String linkName : message.words) printLink(linkName, "["+linkName+"] ", SOFT_PURPLE, "share", true);
+    public synchronized void printSharedLinks(Message m) {
+        print("服务器的%o列表：", "共享资源", LIGHT_GREY, true);
+        for (String stampx : m.words) {printLink(stampx, stampx, "share", true); print(" ", true);}
         print("\n", true);
     }
-    public synchronized void printLink(String stamp, String shown, Color color, String type, boolean isHint) {
+    public synchronized void printLink(String stampx, String shown, String location, boolean isHint) {
         SwingUtilities.invokeLater(() -> {textLock.lock();
             Document doc = displayArea.getStyledDocument();
             try {
                 SimpleAttributeSet set = new SimpleAttributeSet();
-                StyleConstants.setForeground(set, color);
-                doc.insertString(doc.getLength(), shown, set);
-                links.add(new LinkInfo(doc.getLength(), shown.length(), stamp, type, isHint));
-                if (isHint) hintRange.add(new Range(doc.getLength(), shown.length()));}
+                StyleConstants.setForeground(set, isImageName(shown)?HARD_PINK:SOFT_PURPLE);
+                doc.insertString(doc.getLength(), "["+shown+"]", set);
+                links.add(new LinkInfo(doc.getLength(), shown.length() + 2, stampx, location, isHint));
+                if (isHint) hintRange.add(new Range(doc.getLength(), shown.length()+2));}
             catch (BadLocationException ignored) {}
             finally {textLock.unlock();}
         });
     }
     private synchronized void repaintLink(LinkInfo link) {
-        if (!link.beenClicked) {link.beenClicked = true; paint(link.start, link.length, DARK_PINK);}
+        if (!link.beenClicked) {link.beenClicked = true; paint(link.start, link.length, link.isImage()?DARK_PINK:DARK_PURPLE);}
     }
 
     public static class Message implements Serializable {
         char type;
         String[] words;
         Color[] colors;
-        transient BufferedImage image;
+        transient byte[] fileData;
         public Message(char type, String[] words, Color[] colors) {
             this.type = type;
             this.words = words;
             this.colors = colors;
-            this.image = new BufferedImage(1, 1, 1);
+            this.fileData = new byte[0];
         }
         public String serialized() {
             try {
@@ -235,34 +233,29 @@ public class NightShell extends JFrame {
         }
         @Serial private void writeObject(ObjectOutputStream out) throws IOException {
             out.defaultWriteObject();
-            if (image != null) {
-                ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
-                ImageIO.write(image, "png", byteStream);
-                byte[] imageBytes = byteStream.toByteArray();
-                out.writeInt(imageBytes.length);
-                out.write(imageBytes);
+            if (fileData != null) {
+                out.writeInt(fileData.length);
+                out.write(fileData);
             } else {out.writeInt(0);}
         }
         @Serial private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
             in.defaultReadObject();
-            int length = in.readInt();
-            if (length > 0) {
-                byte[] imageBytes = new byte[length];
-                in.readFully(imageBytes);
-                ByteArrayInputStream byteStream = new ByteArrayInputStream(imageBytes);
-                image = ImageIO.read(byteStream);
-            }
+            int fileLength = in.readInt();
+            if (fileLength > 0) {
+                fileData = new byte[fileLength];
+                in.readFully(fileData);
+            } else {fileData = new byte[0];}
         }
     }
 
     public static Message newLines(String word, String name, Color main, Color minor) {
         return new Message(':', new String[]{name+" ", nowTime(true)+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
     }
-    public static Message newLink(String timestamp, String name, Color main, Color minor) {
-        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp}, new Color[]{main, minor});
+    public static Message newLink(String timestamp, String stamp, String x, String name, Color main, Color minor) {
+        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp, stamp, x}, new Color[]{main, minor});
     }
-    public static Message newShareLinks(String[] stamp) {
-        return new Message('=', stamp, new Color[]{});
+    public static Message newShareLinks(String[] stampx) {
+        return new Message('=', stampx, new Color[]{});
     }
     public static Message newNotice(String word) {
         return new Message(':', new String[]{word}, new Color[]{LIGHT_GREY});
@@ -284,12 +277,8 @@ public class NightShell extends JFrame {
         return new Message('.', new String[]{word}, new Color[]{SOFT_GREY});
     }
     public static Message new0() {return new Message(' ', new String[0], new Color[0]);}
-    public static Message new1(String word, Color color) {
-        return new Message(':', new String[]{word}, new Color[]{color});
-    }
-    public static Message newN(int N) {
-        return new Message(':', new String[N], new Color[N]);
-    }
+    public static Message new1(String word, Color color) {return new Message(':', new String[]{word}, new Color[]{color});}
+    public static Message newN(int N) {return new Message(':', new String[N], new Color[N]);}
     public static Message newOrder(String key, Object value) {
         return new Message('/', new String[]{key, value.toString()}, new Color[]{SOFT_WHITE});
     }
@@ -298,8 +287,8 @@ public class NightShell extends JFrame {
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.words)).toArray(String[]::new),
                 Arrays.stream(messages).flatMap(m -> Arrays.stream(m.colors)).toArray(Color[]::new));
     }
-    public static Message newImage(BufferedImage image, String stamp) {
-        Message m = new1(stamp, SOFT_WHITE); m.type = 'i'; m.image = image; return m;
+    public static Message newFile(byte[] data, String stampx) {
+        Message m = new1(stampx, SOFT_WHITE); m.type = 'f'; m.fileData = data; return m;
     }
     public Message deserialized(String s) {
         try {
@@ -316,6 +305,7 @@ public class NightShell extends JFrame {
     }
 
     static final Font DEFAULT_FONT = new Font("Microsoft YaHei", Font.PLAIN, 16);
+    static final Font DEFAULT_TITLE = new Font("Microsoft YaHei", Font.BOLD, 16);
     static final Color SOFT_WHITE = new Color(232, 232, 232);   // Chat
     static final Color LIGHT_GREY = new Color(160, 160, 160);   // Notice
     static final Color SOFT_GREY = new Color(100, 100, 100);    // Whisper,Hint
@@ -329,9 +319,10 @@ public class NightShell extends JFrame {
     static final Color LIGHT_ORANGE = new Color(255, 193, 78);  // Server Main
     static final Color DARK_ORANGE = new Color(199, 134, 14);   // Server Miner
     static final Color HARD_PINK = new Color(255, 140, 174);    // Picture Link
-    static final Color SOFT_PINK = new Color(187, 144, 211);    // TimeStamp
-    static final Color SOFT_PURPLE = new Color(166, 93, 255);   // Shared Link
-    static final Color DARK_PINK = new Color(138, 69, 90);      // Clicked Link
+    static final Color SOFT_PURPLE = new Color(177, 137, 255);  // File Link
+    static final Color GREY_BLUE = new Color(128, 139, 164);    // TimeStamp
+    static final Color DARK_PINK = new Color(138, 69, 90);      // Clicked Picture Link
+    static final Color DARK_PURPLE = new Color(123, 69, 138);   // Clicked File Link
     static final Color SOFT_RED = new Color(253, 105, 97);      // Notice Reject
     static final Color HARD_RED = new Color(215, 13, 0);        // System Error/Exception
     static final Color DARK_RED = new Color(159, 8, 0);         // System Deny
@@ -341,10 +332,10 @@ public class NightShell extends JFrame {
     static final String EjectOne = "/e";
     static final String TerminalSys = "/t";
     static final String MemberList = "/l";
-    static final String SendPicture = "/p";
+    static final String SendFile = "/f";
     static final String ClearWhisper = "/c";
-    static final String SharePicture = "/s";
-    static final String RequestSharedP = "/r";
+    static final String ShareFile = "/s";
+    static final String RequestSharedFiles = "/r";
     static final String RenameRoom = "/rn";
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
@@ -360,7 +351,7 @@ public class NightShell extends JFrame {
     static final String JoinAccept = "join_accept";
     static final String UpdateTitle = "update_title";
     static final String UnusableName = "unusable_name";
-    static final String RequestImage = "request_image";
+    static final String RequestFile = "request_image";
     static final String ResourceLoss = "resource_loss";
     static final String INFO = "information";
     static final String TALK = "talk";
@@ -382,12 +373,13 @@ public class NightShell extends JFrame {
 
 
     public void changeTitleBar(String terminal) {
+        setTitle(VERSION+" | "+terminal);
         setUndecorated(true);
         JPanel titleBar = new JPanel();
         titleBar.setLayout(new BorderLayout());
         titleBar.setPreferredSize(new Dimension(getWidth(), 30));
         titleBar.setBackground(Color.DARK_GRAY);
-        titleLabel.setFont(new Font("Microsoft YaHei", Font.BOLD, 16));
+        titleLabel.setFont(DEFAULT_TITLE);
         titleLabel.setForeground(LIGHT_GREY);
         titleLabel.setHorizontalAlignment(SwingConstants.LEFT);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
@@ -419,7 +411,7 @@ public class NightShell extends JFrame {
         add(titleBar, BorderLayout.NORTH);
     }
     @Override public void setTitle(String title) {titleLabel.setText(title);}
-    public void resetTitle(String terminal) {setTitle(VERSION + " | " + terminal);}
+    public void resetTitle(String terminal) {setTitle(VERSION+" | "+terminal);}
     public void switchUndecorated() {
         if (SHIFT) {SHIFT = false;
             setVisible(false);
@@ -510,16 +502,16 @@ public class NightShell extends JFrame {
     }
 
     public void printColorSpecification() {
-        print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", NightShell.SOFT_WHITE, true);
-        print("以%o为主的信息：所有人都可见的系统告示\n", "浅灰", NightShell.LIGHT_GREY, true);
-        print("以%o为主的信息：仅你自己可见的系统提示\n", "深灰", NightShell.SOFT_GREY, true);
-        print("成员有两个特征色彩：\nMainColor[%o]在主格上使用\n", "成员名", NightShell.LIGHT_AQUA, true);
-        print("MinorColor[%o]在宾格上使用\n", "成员名", NightShell.DARK_AQUA, true);
+        print("以%o为主的信息：所有人都可见的聊天内容\n", "白色", SOFT_WHITE, true);
+        print("以%o为主的信息：所有人都可见的系统告示\n", "浅灰", LIGHT_GREY, true);
+        print("以%o为主的信息：仅你自己可见的系统提示\n", "深灰", SOFT_GREY, true);
+        print("成员有两个特征色彩：\nMainColor[%o]在主格上使用\n", "成员名", LIGHT_AQUA, true);
+        print("MinorColor[%o]在宾格上使用\n", "成员名", DARK_AQUA, true);
     }
     public Color[] resetTheColor(String[] cmd) {
         if (cmd.length == 3) {
             Color main, minor;
-            if ((main = NightShell.hexColor(cmd[1])) != null && (minor = NightShell.hexColor(cmd[2])) != null) {
+            if ((main = hexColor(cmd[1])) != null && (minor = hexColor(cmd[2])) != null) {
                 return new Color[]{main, minor};
             } else print("错误的格式，示例：/rec 41CCFFFF 0C8EBEFF\n", true);
         } else print("用法（十六进制颜色码）：/rec [MainColor] [MinorColor]\n", true);
@@ -530,83 +522,77 @@ public class NightShell extends JFrame {
             String type; int size;
             if (!(type = cmd[1]).isBlank() && cmd[2].matches("[0-9]+") && cmd[2].length() < 4) {
                 size = Integer.parseInt(cmd[2]);
-                print("当前字体已变更为：%o\n", setFont(type, size), NightShell.SOFT_GREY, true);
+                print("当前字体已变更为：%o\n", setFont(type, size), SOFT_GREY, true);
             } else print("错误的格式，示例：/ref KaiTi 16\n（字号不能超过999，常用字体：Microsoft YaHei, KaiTi, SimSun, SimHei, FangSong...）\n", true);
         } else {setDefaultFont(); print("已设为默认字体\n用法：/ref [type] [size]\n", true);}
     }
     public void sharePicture(String[] cmd) {
-        if (cmd.length == 3) {shareImage(cmd[2], (cmd[1].equals(".")) ? cmd[2] : cmd[1]);
-        } else print("未知指令，用法：/S [name] [timestamp]，其中timestamp为图片时间戳，name为给图片所赋名（使用'.'按时间戳赋名）\n", true);
+        if (cmd.length == 3) {
+            shareFile(cmd[2], (cmd[1].equals(".")) ? cmd[2] : cmd[1]);
+        } else print("未知指令，用法：/S [name] [timestamp]，其中name为给文件所赋名（使用'.'按时间戳赋名），timestamp为文件时间戳\n", true);
     }
-    public void requestSharedPictures(String[] cmd) {
-        NightShell.Message m = sharedLinks();
+    public void checkSharedLinks() {
+        Message m = sharedLinks();
         if (m.type == '=') printSharedLinks(m);
         else println(m, true);
     }
 
-    public BufferedImage imageOf(String path, boolean showError) {
-        try {return ImageIO.read(new File(path));
-        } catch (IOException e) {if (showError) jErrorDialog(null, prompt.get("FileCorrupted"));
+    public byte[] byteOf(String filePath, boolean showError) {
+        try {return Files.readAllBytes(Path.of(filePath));
+        } catch (IOException e) {if (showError) jErrorDialog(null, prompt.get("FileNotFoundIn")+filePath);
         } return null;
     }
-    public BufferedImage imageOf(String stamp, String type) {return imageOf(getImagePathIn(stamp, type), false);}
+    public byte[] byteOf(String stampx, String location) {return byteOf(filePathIn(stampx, location), false);}
 
-    public void saveImage_auto(BufferedImage image, String stamp) {
-        File file = new File(getImagePathIn(stamp, "cache"));
-        try {if (!ImageIO.write(image, "png", file)) jErrorDialog(this, prompt.get("FailToSave")+prompt.get("DuplicateTSResources"));
-        } catch (IOException e) {jErrorDialog(this, prompt.get("FailToSave")+e.getMessage());}
+    public void saveFile_auto(byte[] data, String stampx) {
+        String path = filePathIn(stampx, "cache");
+        if (!new File(path).exists()) {
+            try {Files.write(Paths.get(path), data);
+            } catch (IOException e) {jErrorDialog(this, prompt.get("FailToSave")+e.getMessage());}
+        } else jErrorDialog(this, prompt.get("FailToSave")+prompt.get("DuplicateTSResources"));
     }
 
-    public String chooseImage_manual() {
+    public String chooseFile_manual() {
         JFileChooser chooser = new JFileChooser(config.get("upload"));
-        chooser.setFileFilter(new FileNameExtensionFilter("PNG Images", "png"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            String path = chooser.getSelectedFile().getAbsolutePath();
-            if (path.endsWith(".png") && new File(path).exists()) return path;
-            else {jErrorDialog(this, prompt.get("FailToUpload")+prompt.get("RequirePNG")); return "";}
-        } return "0";
+            return chooser.getSelectedFile().getAbsolutePath();
+        } return "";
     }
 
-    /**
-     * 使用系统的默认图片查看器来查看图片：<br/>
-     * Windows系统使用explorer打开图片，<br/>
-     * Unix-like系统（包括Linux和macOS）使用xdg-open或open打开图片（注意：xdg-open在大多数Linux发行版上可用，但macOS应该使用open）。
-     */
-    public void showImageOf(String imagePath) {
-        String absolute_imagePath = new File(imagePath).getAbsolutePath();
-        try {
-            String os = System.getProperty("os.name").toLowerCase();
-            if (os.contains("win")) {
-                new ProcessBuilder("explorer", absolute_imagePath).start();
-            } else if (os.contains("nix") || os.contains("nux") || os.contains("mac")) {
-                new ProcessBuilder(os.contains("mac") ? "open" : "xdg-open", absolute_imagePath).start();
-            } else {
-                jErrorDialog(null, prompt.get("FailToView")+prompt.get("UnKnownSysToCallViewer"));
-            }
-        } catch (IOException e) {jErrorDialog(null, prompt.get("FailToView")+prompt.get("ErrorViewingImage")+e.getMessage());}
+    public boolean check_and_show(String stampx, String location, boolean showError) {
+        String path = filePathIn(stampx, location);
+        if (new File(path).exists()) {
+            if (isImageName(path)) showImageOf(path); else exploreLocation(path); return true;
+        } else if (showError) jErrorDialog(null, prompt.get("FileNotFoundIn")+path); return false;
     }
-    public boolean showImage(String stamp, String type, boolean showError) {
-        String path = getImagePathIn(stamp, type);
-        if (new File(path).exists()) {showImageOf(path); return true;}
-        else if (showError) jErrorDialog(null, prompt.get("ImageNotFoundIn")+path); return false;
-    }
-    public void save_and_show(BufferedImage image, String stamp) {
-        saveImage_auto(image, stamp);
-        showImage(stamp, "cache", true);
-    }
-    public String getImagePathIn(String stamp, String location) {return config.get(location) + stamp + ".png";}
 
-    public void shareImage(String timestamp, String name) {
-        String imagePathInCache = getImagePathIn(timestamp, "cache");
-        if (new File(imagePathInCache).exists()) {
-            String dp = copyFile(imagePathInCache, getImagePathIn(name, "share"));
-            if (!dp.isEmpty()) print("成功添加"+timestamp+"名以%o到分享\n", name, LIGHT_GREY, true);
-        } else print("错误的时间戳\n", SOFT_RED, true);
+    public void save_and_show(byte[] data, String stampx) {
+        saveFile_auto(data, stampx);
+        check_and_show(stampx, "cache", true);
+    }
+
+
+    public void shareFile(String timestamp, String name) {
+        File[] files = new File(config.get("cache")).listFiles();
+        if (files != null) {
+            for (File f : files) {
+                String [] n_s = name_suffix(f.getName());
+                if (n_s[0].equals(timestamp)) {String dn;
+                    if (!(dn = copyFile(f.getAbsolutePath(), filePathIn(name+n_s[1], "share"))).isEmpty()) {
+                        print("成功%o"+timestamp, "添加", HARD_GREEN, true);
+                        print("名以%o到分享\n", dn, LIGHT_GREY, true);
+                    } return;
+                }
+            } print("未知的时间戳\n", SOFT_RED, true);
+        } else print("未找到缓存目录\n", SOFT_RED, true);
     }
     public String copyFile(String sourcePath, String destinationPath) {
         String dp = destinationPath; int i = 0;
-        while (new File(destinationPath).exists()) dp = dp.replace(".png", "")+"("+(++i)+")"+".png";
-        try {Files.copy(Path.of(sourcePath), Path.of(dp)); return dp;
+        File df = new File(dp);
+        String dpf = df.getParent()+"/";
+        String[] d_s = name_suffix(df.getName());
+        while (new File(dp).exists()) dp = dpf+d_s[0]+"("+(++i)+")"+d_s[1];
+        try {Files.copy(Path.of(sourcePath), Path.of(dp)); return new File(dp).getName();
         } catch (IOException e) {printlnException("文件复制失败：", e); return "";}
     }
 
@@ -617,14 +603,23 @@ public class NightShell extends JFrame {
         JOptionPane.showMessageDialog(MF, text, "Error", JOptionPane.ERROR_MESSAGE);
     }
 
-    public synchronized NightShell.Message sharedLinks() {
-        List<String> names = new ArrayList<>();
+    public synchronized Message sharedLinks() {
+        List<String> stampxes = new ArrayList<>();
         File[] files = new File(config.get("share")).listFiles();
         if (files != null)
-            for (File f : files) {String n = f.getName();
-                if (n.endsWith(".png"))
-                    names.add(n.replace(".png", ""));}
-        return (names.isEmpty()) ? newHint("服务器暂无共享资源") : newShareLinks(names.toArray(new String[0]));
+            for (File f : files)
+                stampxes.add(f.getName());
+        return (stampxes.isEmpty()) ? newHint("服务器暂无共享资源") : newShareLinks(stampxes.toArray(new String[0]));
+    }
+
+    public String filePathIn(String stampx, String location) {return config.get(location) + stampx;}
+
+    private static boolean isImageName(String fileName) {
+        return (fileName.endsWith(".png") || fileName.endsWith(".gif") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"));
+    }
+    public String[] name_suffix(String stampx) {
+        int i = stampx.lastIndexOf(".");
+        return new String[]{stampx.substring(0, i), stampx.substring(i)};
     }
 
     Map<String, String> prompt = new HashMap<>();
@@ -667,5 +662,42 @@ public class NightShell extends JFrame {
         } return false;
     }
 
-    public static void doNothing() {}
+    /**
+     * 使用系统的默认图片查看器来查看图片：<br/>
+     * Windows系统使用explorer打开图片，<br/>
+     * Unix-like系统（包括Linux和macOS）使用xdg-open或open打开图片（注意：xdg-open在大多数Linux发行版上可用，但macOS应该使用open）。
+     */
+    public void showImageOf(String imagePath) {
+        String absolute_imagePath = new File(imagePath).getAbsolutePath();
+        try {String os = System.getProperty("os.name").toLowerCase();
+            if (os.contains("win")) {
+                new ProcessBuilder("explorer", absolute_imagePath).start();
+            } else if (os.contains("nix") || os.contains("nux") || os.contains("mac")) {
+                new ProcessBuilder(os.contains("mac") ? "open" : "xdg-open", absolute_imagePath).start();
+            } else jErrorDialog(null, prompt.get("FailToView")+prompt.get("UnKnownSysToCallViewer"));
+        } catch (IOException e) {jErrorDialog(null, prompt.get("FailToView")+prompt.get("ErrorViewingImage")+e.getMessage());}
+    }
+
+    /**
+     * 打开文件所在的位置（文件夹）并选中文件<br/>
+     * Windows系统使用explorer /select<br/>
+     * macOS系统使用open -R<br/>
+     * Linux系统（部分桌面环境支持，如Nautilus）使用xdg-open
+     */
+    public void exploreLocation(String filePath) {
+        try {
+            File file = new File(filePath);
+            if (file.exists()) {
+                String os = System.getProperty("os.name").toLowerCase();
+                if (os.contains("win")) {
+                    Runtime.getRuntime().exec("explorer /select,\"" + file.getAbsolutePath() + "\"");
+                } else if (os.contains("mac")) {
+                    Runtime.getRuntime().exec("open -R \"" + file.getAbsolutePath() + "\"");
+                } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
+                    Runtime.getRuntime().exec("xdg-open \"" + file.getParent() + "\"");
+                } else jErrorDialog(null, prompt.get("ErrorExploreFolder")+prompt.get("UnsupportedPlatForm")+os);
+            } else jErrorDialog(null, prompt.get("FileNotFoundIn")+filePath);
+        } catch (Exception e) {jErrorDialog(null, prompt.get("ErrorExploreFolder")+e.getMessage());}
+    }
+
 }

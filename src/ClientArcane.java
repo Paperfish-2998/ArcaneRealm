@@ -1,6 +1,5 @@
 import java.awt.*;
 import java.awt.event.WindowEvent;
-import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -32,8 +31,8 @@ public class ClientArcane {
                 } super.processWindowEvent(e);
             }
             @Override boolean overloadConfig() {return loadConfig("client");}
-            @Override void requestPicture(String stamp, String type) {
-                if (!showImage(stamp, "cache", false)) request(RequestImage, stamp, type);
+            @Override void requestFile(String stampx, String type) {
+                if (!check_and_show(stampx, "cache", false)) request(RequestFile, stampx, type);
             }
             @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
@@ -100,7 +99,7 @@ public class ClientArcane {
         }
         report(NightShell.newOrder(NightShell.GuestIPv4, guest));
         while (name.isBlank()) {try {wait();} catch (InterruptedException e) {e.printStackTrace();}}
-        shell.clearWhisper();
+        shell.clearHint();
         shell.print("已%o到", "连接", NightShell.HARD_GREEN, false);
         shell.print("位于Ipv4: %o 上的服务器\n", host+":"+port, Color.WHITE, false);
         shell.print("你已进入讨论间\n\n", false);
@@ -124,7 +123,7 @@ public class ClientArcane {
                         case '.' -> shell.println(message, true);
                         case '_' -> shell.printLinkLines(message, false);
                         case '=' -> shell.printSharedLinks(message);
-                        case 'i' -> shell.save_and_show(message.image, message.words[0].split(" ")[0]);
+                        case 'f' -> shell.save_and_show(message.fileData, message.words[0].split(" ")[0]);
                     }
                 }
                 listener.close();
@@ -166,12 +165,12 @@ public class ClientArcane {
         switch (cmd[0].toLowerCase()) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> shell.printColorSpecification();
-            case NightShell.ClearWhisper -> shell.clearWhisper();
+            case NightShell.ClearWhisper -> shell.clearHint();
             case NightShell.MemberList, NightShell.HostPort -> request(M);
             case NightShell.ReColor -> {if (shell.resetTheColor(cmd) != null) request(NightShell.ReColor, cmd[1], cmd[2]);}
             case NightShell.ResetFont -> shell.resetTheFont(cmd);
-            case NightShell.SendPicture -> sendPicture();
-            case NightShell.RequestSharedP -> request(NightShell.RequestSharedP);
+            case NightShell.SendFile -> sendFile();
+            case NightShell.RequestSharedFiles -> request(NightShell.RequestSharedFiles);
             case NightShell.ExitSys -> {
                 request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
                 EarClose(); shell.print("已断开与服务器的连接\n", false);
@@ -186,7 +185,7 @@ public class ClientArcane {
     private void request(String order, String... args) {
         switch (order) {
             case NightShell.JoinRequest, NightShell.TALK -> report(NightShell.newOrder(order, args[0]));
-            case NightShell.ReColor, NightShell.RequestImage -> report(NightShell.newOrder(order, args[0]+" "+args[1]));
+            case NightShell.ReColor, NightShell.RequestFile -> report(NightShell.newOrder(order, args[0]+" "+args[1]));
             default -> report(NightShell.newOrder(order, 0));
         }
     }
@@ -211,21 +210,20 @@ public class ClientArcane {
         shell.setTitle(String.format("%s | 客户端：%s | (在线人数：%s)", args[0], name, args[1]));
     }
 
-    private void sendPicture() {
-        String path;
-        while ((path = shell.chooseImage_manual()).isEmpty()) NightShell.doNothing();
+    private void sendFile() {
+        String path = shell.chooseFile_manual();
         if (!path.equals("0")) {
-            BufferedImage image = shell.imageOf(path, true);
-            if (image != null) report(NightShell.newImage(image, "0"));
+            byte[] data = shell.byteOf(path, true);
+            if (data != null) report(NightShell.newFile(data, new File(path).getName()));
         }
     }
 
     private static final String HELP_TEXT = """
                 /H    指令帮助
-                /L    成员列表
                 /E    退出房间
-                /P    发送图片
-                /R    拉取共享资源
+                /L    成员列表
+                /F    发送图片或文件
+                /R    查看共享资源列表
                 /C    清空提示字
                 /ref  重设显示字体
                 /rec  自定义特征色

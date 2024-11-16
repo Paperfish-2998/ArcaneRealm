@@ -1,19 +1,18 @@
 {
   "TerminateServer": "确定要关闭服务器吗？",
   "ExitRoom": "确定要退出讨论间吗？",
-  "FailToUpload": "上传失败",
   "FailToSave": "保存失败：",
   "FailToView": "查看失败：",
-  "FileCorrupted": "文件已损坏",
-  "RequirePNG": "请上传png格式的图片",
   "ResourceLoss": "资源已被清理",
   "DuplicateTSResources": "缓存目录下已存在相同时间戳的资源",
   "UnKnownSysToCallViewer": "未知的操作系统，未能调用图片查看器",
   "ErrorViewingImage": "查看图片时出错：",
-  "ImageNotFoundIn": "未找到图片资源于：",
+  "FileNotFoundIn": "未找到文件资源于：",
   "XProgram": "程序无法运行：",
   "XCreateConfigFileIn": "无法创建配置文件于：",
   "ErrorCreatingConfigFile": "创建配置文件时出错：",
   "ErrorReadingConfigFile": "读取配置文件时出错：",
-  "XCreateDefaultFolderIn": "无法创建默认目录于："
+  "XCreateDefaultFolderIn": "无法创建默认目录于：",
+  "ErrorExploreFolder": "打开文件位置时出错：",
+  "UnsupportedPlatForm": "不支持的操作系统："
 }
