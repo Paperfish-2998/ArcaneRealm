@@ -1,4 +1,5 @@
 {
+  "log": "./log/client/",
   "cache": "./cache/client/",
   "upload": "C:/Users/Maxtr/Desktop/"
 }

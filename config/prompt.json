@@ -1,6 +1,6 @@
 {
-  "TerminateServer": "确定要关闭服务器吗？",
-  "ExitRoom": "确定要退出讨论间吗？",
+  "TerminateServer": "确定要直接关闭服务器吗（可能会丢失未保存的日志）？",
+  "ExitRoom": "确定要直接退出吗（可能会丢失未保存的日志）？",
   "FailToSave": "保存失败：",
   "FailToView": "查看失败：",
   "ResourceLoss": "资源已被清理",
@@ -12,7 +12,8 @@
   "XCreateConfigFileIn": "无法创建配置文件于：",
   "ErrorCreatingConfigFile": "创建配置文件时出错：",
   "ErrorReadingConfigFile": "读取配置文件时出错：",
-  "XCreateDefaultFolderIn": "无法创建默认目录于：",
+  "XCreateFileIn": "无法创建所需文件或文件夹于：",
   "ErrorExploreFolder": "打开文件位置时出错：",
-  "UnsupportedPlatForm": "不支持的操作系统："
+  "UnsupportedPlatForm": "不支持的操作系统：",
+  "XLog": "输出日志时出错："
 }

@@ -90,7 +90,7 @@ public class ClientArcane {
 
     private synchronized void Notify() {notify();}
     public synchronized void communicate() {
-        while (port == -1) {try {wait();} catch (InterruptedException e) {e.printStackTrace();}}
+        while (port == -1) {try {wait();} catch (InterruptedException e) {shell.printlnException("错误：", e);}}
         try {
             listener = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             speaker = new PrintWriter(clientSocket.getOutputStream(), true);
@@ -137,7 +137,7 @@ public class ClientArcane {
         Ear.start();
     }
 
-    public void EarClose() {Ear.interrupt(); DoEar = false; shell.resetTitle("Client");}
+    public void EarClose() {Ear.interrupt(); DoEar = false; shell.resetTitle("Client"); shell.endLog();}
 
     /**
      * 控制台输入：'/'开头为指令，否则作为内容向服务器报告
@@ -165,7 +165,7 @@ public class ClientArcane {
         switch (cmd[0].toLowerCase()) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> shell.printColorSpecification();
-            case NightShell.ClearWhisper -> shell.clearHint();
+            case NightShell.ClearHint -> shell.clearHint();
             case NightShell.MemberList, NightShell.HostPort -> request(M);
             case NightShell.ReColor -> {if (shell.resetTheColor(cmd) != null) request(NightShell.ReColor, cmd[1], cmd[2]);}
             case NightShell.ResetFont -> shell.resetTheFont(cmd);
@@ -173,7 +173,7 @@ public class ClientArcane {
             case NightShell.RequestSharedFiles -> request(NightShell.RequestSharedFiles);
             case NightShell.ExitSys -> {
                 request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
-                EarClose(); shell.print("已断开与服务器的连接\n", false);
+                shell.print("已断开与服务器的连接\n", false); EarClose();
             }
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
         }
@@ -198,7 +198,7 @@ public class ClientArcane {
         switch (K) {
             case NightShell.UpdateTitle -> updateParaText(M.words[1].split(" "));
             case NightShell.INFO -> shell.println(shell.deserialized(M.words[1]), true);
-            case NightShell.TerminalSys, NightShell.ExitSys -> {EarClose(); shell.print("失去与服务器的连接\n", false);}
+            case NightShell.TerminalSys, NightShell.ExitSys -> {shell.print("失去与服务器的连接\n", false); EarClose();}
             case NightShell.AllowTextHighlight -> shell.setDisplayHighlightable(true);
             case NightShell.BanTextHighlight -> shell.setDisplayHighlightable(false);
             case NightShell.ResourceLoss -> shell.jErrorDialog(null, shell.prompt.get("ResourceLoss"));

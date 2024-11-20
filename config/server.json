@@ -1,4 +1,5 @@
 {
+  "log": "./log/server/",
   "cache": "./cache/server/",
   "share": "./resource/share/",
   "upload": "C:/Users/Maxtr/Desktop/"

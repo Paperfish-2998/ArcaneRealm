@@ -21,16 +21,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
-//todo 一键拉取所有资源（通过缓冲池和任务队列实现，不影响聊天）
-//todo 将久远的消息也存到硬盘，不要占用内存
 /**
  * Night Shell <br/>
  * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
     public static final String VERSION = "Arcane Realm v1.8";
+    private final String BirthTime = nowTime(3);
     private final ReentrantLock textLock = new ReentrantLock();
     private final JLabel titleLabel = new JLabel();
     private final JTextPane displayArea = new JTextPane();
@@ -65,7 +63,7 @@ public class NightShell extends JFrame {
                         requestFile(link.stampx, link.location); repaintLink(link); return;
             }}}
         });
-        if (overloadConfig()) setVisible(true);
+        if (overloadConfig() && tryCreateFile(config.get("log")+BirthTime+".txt")) setVisible(true);
         else System.exit(0);
     }
     void requestFile(String stampx, String type) {}
@@ -125,29 +123,40 @@ public class NightShell extends JFrame {
 
     public void prefillInput(String string) {inputArea.setText(string);}
 
-    private static class Range {int start, length; public Range(int a, int l) {start = a-l; length = l;}}
-    private final List<Range> hintRange = new ArrayList<>();
-    public synchronized void clearHint() {
-        if (hintRange.isEmpty()) return;
+    private final List<Range> hints = new ArrayList<>();
+    private static class Range {
+        int start, length;
+        public Range(int a, int l) {start = a-l; length = l;}
+        int end() {return start+length;}
+        void move(int f) {start+=f;}
+    }
+    public synchronized void clearHint(int log) {
+        if ((log==0)&&hints.isEmpty() || ((log==1)&&!logCriteria())) return;
         SwingUtilities.invokeLater(() -> {textLock.lock();
             try {
                 Document doc = displayArea.getStyledDocument();
-                for (int i = hintRange.size()-1; i>=0; i--) {
-                    Range range = hintRange.get(i);
-                    doc.remove(range.start, range.length);
-                    links.forEach(e -> e.tryMove(range.start, range.length));
-                } hintRange.clear();
-                links = links.stream().filter(e -> !e.hint).collect(Collectors.toList());
+                for (int i = hints.size()-1; i>=0; i--) {
+                    Range hint = hints.get(i);
+                    doc.remove(hint.start, hint.length);
+                    links.stream().filter(e -> !e.hint && e.start>hint.end()).forEach(e -> e.move(-hint.length));
+                } hints.clear();
+                links.removeIf(e -> e.hint);
+                if      (log==1) logging();
+                else if (log==2) endLogging();
             } catch (BadLocationException ignored) {
             } finally {textLock.unlock();}
         });
     }
-    private List<LinkInfo> links = new ArrayList<>();
+    public synchronized void clearHint() {clearHint(0);}
+    public synchronized void tryLog() {clearHint(1);}
+    public synchronized void endLog() {clearHint(2);}
+
+    private final List<LinkInfo> links = new ArrayList<>();
     private static class LinkInfo {
         int start, length; String stampx; String location; boolean beenClicked = false; boolean hint;
         LinkInfo(int a, int l, String sx, String o, boolean h) {start=a-l; length=l; stampx=sx; location=o; hint=h;}
-        public boolean isImage() {return isImageName(stampx);}
-        public void tryMove(int s, int l) {if (!hint && start>s+l) start-=l;}
+        void move(int f) {start+=f;}
+        boolean isImage() {return isImageName(stampx);}
     }
 
     public synchronized void paint(int start, int length, Color color) {
@@ -156,17 +165,23 @@ public class NightShell extends JFrame {
         displayArea.getStyledDocument().setCharacterAttributes(start, length, attributes, true);
     }
 
-    public synchronized void print(String string, Color color, boolean isHint) {
+    public synchronized void print(String string, Color color, boolean isHint, boolean isLink, String stampx, String location) {
         SwingUtilities.invokeLater(() -> {textLock.lock();
             try {
                 SimpleAttributeSet set = new SimpleAttributeSet();
                 StyleConstants.setForeground(set, color);
                 Document doc = displayArea.getStyledDocument();
                 doc.insertString(doc.getLength(), string, set);
-                if (isHint) hintRange.add(new Range(doc.getLength(), string.length()));}
+                if (isLink) links.add(new LinkInfo(doc.getLength(), string.length(), stampx, location, isHint));
+                if (isHint) hints.add(new Range(doc.getLength(), string.length()));
+                tryLog();}
             catch (BadLocationException ignored) {}
             finally {textLock.unlock();}
         });
+    }
+
+    public synchronized void print(String string, Color color, boolean isHint) {
+        print(string, color, isHint, false, null, null);
     }
     public synchronized void print(Message message, boolean isHint) {
         for (int i=0; i<message.words.length; i++) print(message.words[i], message.colors[i], isHint);
@@ -176,12 +191,15 @@ public class NightShell extends JFrame {
     public synchronized void print(String words, boolean isHint) {print(newWhisper(words), isHint);}
     public synchronized void print(String words, Object objects, Color color, boolean isHint) {print(newWhisper(words, objects, color), isHint);}
 
-    public synchronized void printTime(String words) {print(words.replace("%t", nowTime(true)), false);}
+    public synchronized void printTime(String words) {print(words.replace("%t", nowTime(2)), false);}
     public synchronized void printlnTime() {printTime(" (%t)\n");}
     public synchronized void printlnException(String s, Exception e) {
         print(s, SOFT_GREY, false); print(e.getMessage()+"\n", HARD_RED, false);
     }
 
+    public synchronized void printLink(String stampx, String shown, String location, boolean isHint) {
+        print("["+shown+"]", isImageName(shown)?HARD_PINK:SOFT_PURPLE, isHint, true, stampx, location);
+    }
     public synchronized void printLinkLines(Message m, boolean withTimestamp) {
         for (int i=0; i<2; i++)
             print(m.words[i], m.colors[i], false);
@@ -193,22 +211,11 @@ public class NightShell extends JFrame {
         for (String stampx : m.words) {printLink(stampx, stampx, "share", true); print(" ", true);}
         print("\n", true);
     }
-    public synchronized void printLink(String stampx, String shown, String location, boolean isHint) {
-        SwingUtilities.invokeLater(() -> {textLock.lock();
-            Document doc = displayArea.getStyledDocument();
-            try {
-                SimpleAttributeSet set = new SimpleAttributeSet();
-                StyleConstants.setForeground(set, isImageName(shown)?HARD_PINK:SOFT_PURPLE);
-                doc.insertString(doc.getLength(), "["+shown+"]", set);
-                links.add(new LinkInfo(doc.getLength(), shown.length() + 2, stampx, location, isHint));
-                if (isHint) hintRange.add(new Range(doc.getLength(), shown.length()+2));}
-            catch (BadLocationException ignored) {}
-            finally {textLock.unlock();}
-        });
-    }
+
     private synchronized void repaintLink(LinkInfo link) {
         if (!link.beenClicked) {link.beenClicked = true; paint(link.start, link.length, link.isImage()?DARK_PINK:DARK_PURPLE);}
     }
+
 
     public static class Message implements Serializable {
         char type;
@@ -249,10 +256,10 @@ public class NightShell extends JFrame {
     }
 
     public static Message newLines(String word, String name, Color main, Color minor) {
-        return new Message(':', new String[]{name+" ", nowTime(true)+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
+        return new Message(':', new String[]{name+" ", nowTime(2)+"\n", word}, new Color[]{main, minor, SOFT_WHITE});
     }
     public static Message newLink(String timestamp, String stamp, String x, String name, Color main, Color minor) {
-        return new Message('_', new String[]{name+" ", nowTime(true)+"\n", timestamp, stamp, x}, new Color[]{main, minor});
+        return new Message('_', new String[]{name+" ", nowTime(2)+"\n", timestamp, stamp, x}, new Color[]{main, minor});
     }
     public static Message newShareLinks(String[] stampx) {
         return new Message('=', stampx, new Color[]{});
@@ -315,9 +322,9 @@ public class NightShell extends JFrame {
     static final Color HARD_GREEN = new Color(117, 190, 0);     // System Pass
     static final Color LIGHT_GREEN = new Color(30, 231, 140);   // Notice Accept
     static final Color LIGHT_AQUA = new Color(65, 204, 255);    // NewUser Main
-    static final Color DARK_AQUA = new Color(12, 142, 190);     // NewUser Miner
+    static final Color DARK_AQUA = new Color(11, 122, 164);     // NewUser Miner
     static final Color LIGHT_ORANGE = new Color(255, 193, 78);  // Server Main
-    static final Color DARK_ORANGE = new Color(199, 134, 14);   // Server Miner
+    static final Color DARK_ORANGE = new Color(173, 117, 11);   // Server Miner
     static final Color HARD_PINK = new Color(255, 140, 174);    // Picture Link
     static final Color SOFT_PURPLE = new Color(177, 137, 255);  // File Link
     static final Color GREY_BLUE = new Color(128, 139, 164);    // TimeStamp
@@ -333,7 +340,7 @@ public class NightShell extends JFrame {
     static final String TerminalSys = "/t";
     static final String MemberList = "/l";
     static final String SendFile = "/f";
-    static final String ClearWhisper = "/c";
+    static final String ClearHint = "/c";
     static final String ShareFile = "/s";
     static final String RequestSharedFiles = "/r";
     static final String RenameRoom = "/rn";
@@ -356,9 +363,13 @@ public class NightShell extends JFrame {
     static final String INFO = "information";
     static final String TALK = "talk";
 
-    public static String nowTime(boolean normative) {
-        if (normative) return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        else return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSSS"));
+    public static String nowTime(int format) {
+        return switch (format) {
+            case 1 -> LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSSS"));
+            case 2 -> LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd  HH:mm:ss"));
+            case 3 -> LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+            default -> LocalDateTime.now().toString();
+        };
     }
     public static Color hexColor(String hexadecimal) {
         if (hexadecimal.length() == 8 && hexadecimal.matches("[#0-9a-fA-F]+")) {
@@ -636,6 +647,7 @@ public class NightShell extends JFrame {
         if (configFile.exists()) {
             if ((config = json2map(gson, configPath)) == null) return false;
         } else {
+            config.put("log", "./log/"+ter+"/");
             config.put("cache", "./cache/"+ter+"/");
             config.put("upload", "");
             if ("server".equals(ter)) config.put("share", "./resource/share");
@@ -646,7 +658,8 @@ public class NightShell extends JFrame {
                 }
             } catch (Exception e) {jErrorDialog(null, prompt.get("XProgram")+prompt.get("ErrorCreatingConfigFile")+"\n"+e.getMessage()); return false;}
         }
-        return !(cannotCreateFolder(config.get("cache")) | ("server".equals(ter) && cannotCreateFolder(config.get("share"))));
+        boolean shareOK = !"server".equals(ter) || tryCreateFolder(config.get("share"));
+        return shareOK && tryCreateFolder(config.get("log")) && tryCreateFolder(config.get("cache"));
     }
 
     private HashMap<String, String> json2map(Gson gson, String path) {
@@ -655,11 +668,46 @@ public class NightShell extends JFrame {
         } catch (Exception e) {jErrorDialog(null, prompt.get("XProgram")+prompt.get("ErrorReadingConfigFile")+"\n"+e.getMessage()); return null;}
     }
 
-    private boolean cannotCreateFolder(String path) {
-        File bank = new File(path);
-        if (!bank.exists() && !bank.mkdirs()) {
-            jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateDefaultFolderIn")+path); return true;
-        } return false;
+    private boolean tryCreateFolder(String path) {
+        File folder = new File(path);
+        if (!folder.exists() && !folder.mkdirs()) {
+            jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateFileIn")+path); return false;
+        } return true;
+    }
+    private boolean tryCreateFile(String path) {
+        File file = new File(path);
+        try {
+            if (!file.exists() && !file.createNewFile()) {
+                jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateFileIn")+path); return false;
+            } else return true;
+        } catch (IOException e) {jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateFileIn")+path); return false;}
+    }
+
+    private static final int MAX_DISPLAY_C = 10000;
+    private static final int LOG_DISPLAY_C = 6000;
+
+    private boolean logCriteria() {return displayArea.getText().length() >= MAX_DISPLAY_C;}
+    public synchronized void logging() {
+        try {
+            String text = displayArea.getStyledDocument().getText(0, LOG_DISPLAY_C);
+            int ni = text.lastIndexOf('\n');
+            int len = (ni > 0) ? ni : text.length();
+            text = text.substring(0, len);
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(config.get("log")+BirthTime+".txt", true))) {
+                writer.write(text);
+                displayArea.getStyledDocument().remove(0, len);
+                hints.forEach(e -> e.move(-len));
+                links.removeIf(e -> e.start<len);
+                links.forEach(e -> e.move(-len));
+                print("LOG: 日志备份已完成\n", true);
+            } catch (Exception e) {printlnException("LOG: 日志备份出现异常：", e);}
+        } catch (BadLocationException ignored) {}
+    }
+    public void endLogging() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(config.get("log")+BirthTime+".txt", true))) {
+            writer.write(displayArea.getText());
+            print("LOG: 日志备份已完成，安全结束\n", true);
+        } catch (Exception e) {jErrorDialog(this, prompt.get("XLog")+e.getMessage());}
     }
 
     /**

@@ -44,7 +44,7 @@ public class ServerArcane {
         try {
             String localIPv4 = NightShell.getLocalIPv4Address();
             if (localIPv4 == null) shell.print("获取局域网 IPv4 地址时出现%o，请检查网络连接\n", "未知错误", NightShell.HARD_RED, true);
-            else {host = localIPv4; shell.print("设定端口号（0~65535）：", true); shell.prefillInput("8888");}
+            else {host = localIPv4; shell.print("设定端口号（0~65535）：", true); shell.prefillInput("2718");}
         } catch (SocketException e) {
             shell.printlnException("获取局域网 IPv4 地址时出错：", e);
         }
@@ -54,7 +54,7 @@ public class ServerArcane {
 
     private synchronized void Notify() {notify();}
     public synchronized void communicate() {
-        while (port == -1) {try {wait();} catch (InterruptedException e) {e.printStackTrace();}}
+        while (port == -1) {try {wait();} catch (InterruptedException e) {shell.printlnException("错误：", e);}}
         clientAntennas = new ArrayList<>();
         END = false;
         try {
@@ -132,6 +132,7 @@ public class ServerArcane {
         clientAntennas.clear();
         shell.print("服务器已关闭\n", false);
         shell.resetTitle("Server");
+        shell.endLog();
     }
 
     private void ejectOne(ClientAntenna C) {
@@ -179,7 +180,7 @@ public class ServerArcane {
             case NightShell.ColorHint -> shell.printColorSpecification();
             case NightShell.MemberList -> shell.println(getMemberList(true), true);
             case NightShell.HostPort -> shell.println(getHostPort(), true);
-            case NightShell.ClearWhisper -> shell.clearHint();
+            case NightShell.ClearHint -> shell.clearHint();
             case NightShell.BanTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
             case NightShell.AllowTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
@@ -247,7 +248,7 @@ public class ServerArcane {
                 default -> order(C, K);
             }
         } else if (M.type == 'f') {
-            String timestamp = NightShell.nowTime(false);
+            String timestamp = NightShell.nowTime(1);
             String[] stamp_x = shell.name_suffix(M.words[0]);
             shell.saveFile_auto(M.fileData, timestamp + stamp_x[1]);
             broadcastLink(NightShell.newLink(timestamp, stamp_x[0], stamp_x[1], C.name, C.mainColor, C.minorColor));
