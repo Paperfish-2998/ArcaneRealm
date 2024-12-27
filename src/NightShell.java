@@ -31,7 +31,7 @@ import java.util.zip.ZipOutputStream;
  * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
-    public static final String VERSION = "Arcane Realm v1.8";
+    public static final String VERSION = "Arcane Realm v1.8.1";
     private final String BirthTime = nowTime(3);
     private final ReentrantLock textLock = new ReentrantLock();
     private final JLabel titleLabel = new JLabel();
@@ -552,8 +552,8 @@ public class NightShell extends JFrame {
     }
 
     public void saveFile_auto(byte[] data, String stampx) {
-        String path = filePathIn(stampx, "cache");
-        saveZipBytesTo(Paths.get(path), data);
+        Path path = resolveUniquePath(Path.of(filePathIn(stampx, "cache")));
+        saveZipBytesTo(path, data);
     }
 
     public String chooseFile_manual() {
@@ -591,12 +591,10 @@ public class NightShell extends JFrame {
         } else print("未找到缓存目录\n", SOFT_RED, true);
     }
     public String copyFile(String sourcePath, String destinationPath) {
-        String dp = destinationPath; int i = 0;
-        File df = new File(dp);
-        String dpf = df.getParent()+"/";
-        String[] d_s = name_suffix(df.getName());
-        while (new File(dp).exists()) dp = dpf+d_s[0]+"("+(++i)+")"+d_s[1];
-        try {Files.copy(Path.of(sourcePath), Path.of(dp)); return new File(dp).getName();
+        Path destination = resolveUniquePath(Path.of(destinationPath));
+        try {
+            Files.copy(Path.of(sourcePath), destination, StandardCopyOption.REPLACE_EXISTING);
+            return destination.getFileName().toString();
         } catch (IOException e) {printlnException("文件复制失败：", e); return "";}
     }
 
@@ -739,6 +737,26 @@ public class NightShell extends JFrame {
         } catch (IOException e) {
             if (showError) {jErrorDialog(null, prompt.get("FileNotFoundIn")+filePath);}
         } return byteArrayOutputStream.toByteArray();
+    }
+
+    /**
+     * 检查重名，若重名则将路径文件名尾上(i)
+     */
+    private Path resolveUniquePath(Path destination) {
+        String baseName = destination.getFileName().toString();
+        String directory = destination.getParent() != null ? destination.getParent().toString() : "";
+        String name = baseName;
+        String extension = "";
+        int dotIndex = baseName.lastIndexOf(".");
+        if (dotIndex != -1) {
+            name = baseName.substring(0, dotIndex);
+            extension = baseName.substring(dotIndex);
+        }
+        int counter = 0;
+        Path uniquePath = destination;
+        while (Files.exists(uniquePath))
+            uniquePath = Path.of(directory, name+"("+(++counter)+")"+extension);
+        return uniquePath;
     }
 
     /**

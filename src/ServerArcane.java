@@ -227,7 +227,8 @@ public class ServerArcane {
             }
             shell.print("Responded to [%o]'s request: ", C.name, C.mainColor, false);
             shell.print(K, NightShell.LIGHT_GREY, false);
-            if (K.equals(NightShell.RequestFile)) shell.print("->"+M.words[1], NightShell.LIGHT_GREY, false);
+            if (K.equals(NightShell.RequestFile))
+                shell.print("->"+M.words[1], NightShell.LIGHT_GREY, false);
             shell.printlnTime();
             switch (K) {
                 case NightShell.ExitSys -> clientExit(C);
