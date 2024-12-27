@@ -1,0 +1,20 @@
+1.使用IDEA生成jar
+[IntelliJ IDEA] 文件->[项目结构]{项目设置->工件->添加(+)->JAR->来自具有依赖项的模块...->[从模块创建JAR]{
+主类（指定运行主类）}->确定，名称（设定工件名:jar）}->确定
+[IntelliJ IDEA] 构建->构建工件...->[构建工件]{`工件名`:jar->[的操作]构建}
+在项目目录->out\artifacts\`工件名`_jar下将生成项目的jar
+
+
+2.获取jre
+[命令行] ->: jlink --module-path jmods --add-modules java.desktop,java.base --output jre
+在当前目录下将生成一个jre包
+
+
+3.使用jpackage打包成exe
+[命令行] ->: jpackage --type app-image --input [Jar包所在文件夹] --runtime-image [Jre文件夹] --name [应用名称] --main-jar [可执行Jar包] --icon [程序图标的路径] --app-version [版本号] --vendor [程序供应商的名称] --copyright [版权信息] --description [应用描述] --dest [输出目录]
+
+<<示例>>
+jpackage --type app-image --input C:\Users\Maxtr\IdeaProjects\DEMO\out\artifacts\demo_jar --runtime-image C:\Users\Maxtr\IdeaProjects\DEMO\jre --name Demo --main-jar DEMO.jar --app-version 1.0 --dest C:\Users\Maxtr\IdeaProjects\DEMO\out\executable
+在项目目录->out\executable下将生成可执行.exe文件及其依赖文件
+
+jpackage --type app-image --input C:\Users\Maxtr\IdeaProjects\_MyCreation\ArcaneRealm0\out\artifacts\ArcaneClient_jar --runtime-image C:\Users\Maxtr\IdeaProjects\jre --name "Test demo" --main-jar ArcaneRealm0.jar --dest C:\Users\Maxtr\IdeaProjects\_MyCreation\ArcaneRealm0/out --icon C:\Users\Maxtr\IdeaProjects\_MyCreation\ArcaneRealm0\resource\arcane.ico

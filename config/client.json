@@ -1,5 +1,6 @@
 {
   "log": "./log/client/",
   "cache": "./cache/client/",
-  "upload": "C:/Users/Maxtr/Desktop/"
+  "upload": "C:/Users/Maxtr/Desktop/",
+  "defaultAddress": "10.16.166.113:27181"
 }

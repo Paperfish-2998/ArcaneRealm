@@ -65,7 +65,7 @@ public class ClientArcane {
         try {
             String localIPv4 = NightShell.getLocalIPv4Address();
             if (localIPv4 == null) shell.print("%o至网络", "无法连接", NightShell.HARD_RED, true);
-            else {guest = localIPv4; shell.print("服务器IPv4地址+端口号：", true);}
+            else {guest = localIPv4; shell.print("服务器IPv4地址+端口号：", true); shell.prefillInput(shell.getConfig("defaultAddress"));}
         } catch (SocketException e) {
             shell.printlnException("尝试获取网络地址时出错：", e);
         }
@@ -84,7 +84,7 @@ public class ClientArcane {
                 default -> shell.print("\n连接失败，未知的服务器应答：%o\n", W[0], NightShell.LIGHT_GREY, true);
             }
         } catch (SocketException e) {shell.printlnException("连接超时：", e);
-        } catch (IOException e) {e.printStackTrace();}
+        } catch (IOException e) {throw new RuntimeException(e);}
         return accept;
     }
 
@@ -98,7 +98,7 @@ public class ClientArcane {
             shell.printlnException("建立通信时发生错误：", e); return;
         }
         report(NightShell.newOrder(NightShell.GuestIPv4, guest));
-        while (name.isBlank()) {try {wait();} catch (InterruptedException e) {e.printStackTrace();}}
+        while (name.isBlank()) {try {wait();} catch (InterruptedException e) {throw new RuntimeException(e);}}
         shell.clearHint();
         shell.print("已%o到", "连接", NightShell.HARD_GREEN, false);
         shell.print("位于Ipv4: %o 上的服务器\n", host+":"+port, Color.WHITE, false);
@@ -148,7 +148,7 @@ public class ClientArcane {
             if (words.charAt(0) == '/') {command(words);}
             else request(NightShell.TALK, words);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
@@ -170,7 +170,7 @@ public class ClientArcane {
             case NightShell.ReColor -> {if (shell.resetTheColor(cmd) != null) request(NightShell.ReColor, cmd[1], cmd[2]);}
             case NightShell.ResetFont -> shell.resetTheFont(cmd);
             case NightShell.SendFile -> sendFile();
-            case NightShell.RequestSharedFiles -> request(NightShell.RequestSharedFiles);
+            case NightShell.RequestSharedList -> request(NightShell.RequestSharedList);
             case NightShell.ExitSys -> {
                 request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
                 shell.print("已断开与服务器的连接\n", false); EarClose();
@@ -212,8 +212,8 @@ public class ClientArcane {
 
     private void sendFile() {
         String path = shell.chooseFile_manual();
-        if (!path.equals("0")) {
-            byte[] data = shell.byteOf(path, true);
+        if (!path.equals("\0")) {
+            byte[] data = shell.fetchZipBytesOf(path, true);
             if (data != null) report(NightShell.newFile(data, new File(path).getName()));
         }
     }

@@ -3,6 +3,7 @@ import java.awt.event.WindowEvent;
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -44,7 +45,7 @@ public class ServerArcane {
         try {
             String localIPv4 = NightShell.getLocalIPv4Address();
             if (localIPv4 == null) shell.print("获取局域网 IPv4 地址时出现%o，请检查网络连接\n", "未知错误", NightShell.HARD_RED, true);
-            else {host = localIPv4; shell.print("设定端口号（0~65535）：", true); shell.prefillInput("2718");}
+            else {host = localIPv4; shell.print("设定端口号（0~65535）：", true); shell.prefillInput(shell.getConfig("defaultPort"));}
         } catch (SocketException e) {
             shell.printlnException("获取局域网 IPv4 地址时出错：", e);
         }
@@ -55,7 +56,7 @@ public class ServerArcane {
     private synchronized void Notify() {notify();}
     public synchronized void communicate() {
         while (port == -1) {try {wait();} catch (InterruptedException e) {shell.printlnException("错误：", e);}}
-        clientAntennas = new ArrayList<>();
+        clientAntennas = Collections.synchronizedList(new ArrayList<>());   //todo test
         END = false;
         try {
             serverSocket = new ServerSocket(port);
@@ -153,7 +154,7 @@ public class ServerArcane {
             if (words.charAt(0) == '/') command(words);
             else broadcast(NightShell.newLines(words, serverName, mainColor, minorColor));
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
@@ -186,7 +187,7 @@ public class ServerArcane {
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
             case NightShell.AllowNewClient -> {allowNewClient = true; broadcastT("讨论间现在%o新成员加入", "允许", NightShell.LIGHT_GREEN);}
             case NightShell.ShareFile -> shell.sharePicture(cmd);
-            case NightShell.RequestSharedFiles -> shell.checkSharedLinks();
+            case NightShell.RequestSharedList -> shell.checkSharedLinks();
             case NightShell.TerminalSys -> {broadcastT("服务器%o了讨论间", "关闭", NightShell.DARK_RED); orderAll(NightShell.TerminalSys); END = true;}
             case NightShell.RenameRoom -> {
                 if (cmd.length == 2) {roomName = cmd[1];
@@ -241,7 +242,7 @@ public class ServerArcane {
                 }
                 case NightShell.RequestFile -> {
                     String[] stampx_location = M.words[1].split(" ");
-                    byte[] data = shell.byteOf(stampx_location[0], stampx_location[1]);
+                    byte[] data = shell.fetchZipBytesOf(shell.filePathIn(stampx_location[0], stampx_location[1]), false);
                     if (data != null) tell(C, NightShell.newFile(data, M.words[1]));
                     else tell(C, NightShell.newOrder(NightShell.ResourceLoss, 0));
                 }
@@ -264,7 +265,7 @@ public class ServerArcane {
             case NightShell.JoinReject, NightShell.UnusableName,
                     NightShell.INFO -> tell(C, NightShell.newOrder(order, args[0]));
             case NightShell.UpdateTitle -> tell(C, NightShell.newOrder(order, roomName+" "+clientAntennas.size()));
-            case NightShell.RequestSharedFiles -> tell(C, shell.sharedLinks());
+            case NightShell.RequestSharedList -> tell(C, shell.sharedLinks());
             default -> tell(C, NightShell.newOrder(order, 0));
         }
     }
@@ -314,7 +315,7 @@ public class ServerArcane {
         private final ServerArcane SA;
         public Socket clientSocket;
         public BufferedReader listener;
-        private PrintWriter speaker;
+        private final PrintWriter speaker;
         private Thread Ear;
         private boolean doListen;
         public String IPv4;
@@ -328,7 +329,7 @@ public class ServerArcane {
                 this.listener = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
                 this.speaker = new PrintWriter(clientSocket.getOutputStream(), true);
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new RuntimeException(e);
             }
             mainColor = NightShell.LIGHT_AQUA;
             minorColor = NightShell.DARK_AQUA;
@@ -363,7 +364,7 @@ public class ServerArcane {
                 speaker.close();
                 clientSocket.close();
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
     }

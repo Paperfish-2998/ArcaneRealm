@@ -21,6 +21,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Night Shell <br/>
@@ -53,7 +57,7 @@ public class NightShell extends JFrame {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
-        } catch (Exception e) {e.printStackTrace();}
+        } catch (Exception e) {throw new RuntimeException(e);}
         inputArea.setPreferredSize(new Dimension(getWidth(), 48));
         displayArea.addMouseListener(new MouseInputAdapter() {
             @Override public void mouseClicked(MouseEvent e) {
@@ -76,7 +80,7 @@ public class NightShell extends JFrame {
                 if (e.getKeyCode() == KeyEvent.VK_ENTER) {
                     if (!SHIFT) EnterInput();
                     else {try {inputArea.getDocument().insertString(inputArea.getCaretPosition(), "\n", null);
-                    } catch (BadLocationException ex) {ex.printStackTrace();}}
+                    } catch (BadLocationException ex) {throw new RuntimeException(ex);}}
                     e.consume();
                 }
             }
@@ -342,7 +346,7 @@ public class NightShell extends JFrame {
     static final String SendFile = "/f";
     static final String ClearHint = "/c";
     static final String ShareFile = "/s";
-    static final String RequestSharedFiles = "/r";
+    static final String RequestSharedList = "/r";
     static final String RenameRoom = "/rn";
     static final String HostPort = "/host";
     static final String ColorHint = "/color";
@@ -358,7 +362,7 @@ public class NightShell extends JFrame {
     static final String JoinAccept = "join_accept";
     static final String UpdateTitle = "update_title";
     static final String UnusableName = "unusable_name";
-    static final String RequestFile = "request_image";
+    static final String RequestFile = "request_file";
     static final String ResourceLoss = "resource_loss";
     static final String INFO = "information";
     static final String TALK = "talk";
@@ -503,8 +507,7 @@ public class NightShell extends JFrame {
 
     public static String getLocalIPv4Address() throws SocketException {
         return NetworkInterface.networkInterfaces()
-                .filter(netIf -> {try {return netIf.isUp() && !netIf.isLoopback() && !netIf.isVirtual();
-                } catch (SocketException e) {return false;}})
+                .filter(netIf -> {try {return netIf.isUp() && !netIf.isLoopback() && !netIf.isVirtual();} catch (SocketException e) {return false;}})
                 .flatMap(NetworkInterface::inetAddresses)
                 .filter(a -> a instanceof Inet4Address && !a.isLoopbackAddress())
                 .map(InetAddress::getHostAddress)
@@ -548,32 +551,23 @@ public class NightShell extends JFrame {
         else println(m, true);
     }
 
-    public byte[] byteOf(String filePath, boolean showError) {
-        try {return Files.readAllBytes(Path.of(filePath));
-        } catch (IOException e) {if (showError) jErrorDialog(null, prompt.get("FileNotFoundIn")+filePath);
-        } return null;
-    }
-    public byte[] byteOf(String stampx, String location) {return byteOf(filePathIn(stampx, location), false);}
-
     public void saveFile_auto(byte[] data, String stampx) {
         String path = filePathIn(stampx, "cache");
-        if (!new File(path).exists()) {
-            try {Files.write(Paths.get(path), data);
-            } catch (IOException e) {jErrorDialog(this, prompt.get("FailToSave")+e.getMessage());}
-        } else jErrorDialog(this, prompt.get("FailToSave")+prompt.get("DuplicateTSResources"));
+        saveZipBytesTo(Paths.get(path), data);
     }
 
     public String chooseFile_manual() {
         JFileChooser chooser = new JFileChooser(config.get("upload"));
         if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             return chooser.getSelectedFile().getAbsolutePath();
-        } return "";
+        } return "\0";
     }
 
     public boolean check_and_show(String stampx, String location, boolean showError) {
         String path = filePathIn(stampx, location);
         if (new File(path).exists()) {
-            if (isImageName(path)) showImageOf(path); else exploreLocation(path); return true;
+            if (isImageName(path)) showImageOf(path);
+            else exploreLocation(path); return true;
         } else if (showError) jErrorDialog(null, prompt.get("FileNotFoundIn")+path); return false;
     }
 
@@ -581,7 +575,6 @@ public class NightShell extends JFrame {
         saveFile_auto(data, stampx);
         check_and_show(stampx, "cache", true);
     }
-
 
     public void shareFile(String timestamp, String name) {
         File[] files = new File(config.get("cache")).listFiles();
@@ -618,8 +611,10 @@ public class NightShell extends JFrame {
         List<String> stampxes = new ArrayList<>();
         File[] files = new File(config.get("share")).listFiles();
         if (files != null)
-            for (File f : files)
-                stampxes.add(f.getName());
+            for (File f : files) {
+                if (f.isDirectory()) stampxes.add(f.getName()+"/");
+                else                 stampxes.add(f.getName());
+            }
         return (stampxes.isEmpty()) ? newHint("服务器暂无共享资源") : newShareLinks(stampxes.toArray(new String[0]));
     }
 
@@ -630,13 +625,16 @@ public class NightShell extends JFrame {
     }
     public String[] name_suffix(String stampx) {
         int i = stampx.lastIndexOf(".");
-        return new String[]{stampx.substring(0, i), stampx.substring(i)};
+        return (i == -1) ? new String[]{stampx, ""} : new String[]{stampx.substring(0, i), stampx.substring(i)};
     }
+
+    public String getConfig(String item) {return config.get(item);}
 
     Map<String, String> prompt = new HashMap<>();
     private Map<String, String> config = new HashMap<>();
     boolean overloadConfig() {return loadConfig("0");}
     boolean loadConfig(String ter) {
+        boolean isServer = "server".equals(ter);
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         String promptPath = "./config/prompt.json";
         if (!new File(promptPath).exists()) {jErrorDialog(null, "File "+promptPath+" not found"); return false;}
@@ -650,7 +648,10 @@ public class NightShell extends JFrame {
             config.put("log", "./log/"+ter+"/");
             config.put("cache", "./cache/"+ter+"/");
             config.put("upload", "");
-            if ("server".equals(ter)) config.put("share", "./resource/share");
+            if (isServer) {
+                config.put("share", "./resource/share");
+                config.put("defaultPort", "");
+            } else config.put("defaultAddress", "");
             try {if (new File(configFile.getParent()).mkdirs() && !configFile.createNewFile()) {
                 jErrorDialog(null, prompt.get("XProgram")+prompt.get("XCreateConfigFileIn")+configPath); return false;}
                 try (FileWriter writer = new FileWriter(configPath)) {
@@ -708,6 +709,63 @@ public class NightShell extends JFrame {
             writer.write(displayArea.getText());
             print("LOG: 日志备份已完成，安全结束\n", true);
         } catch (Exception e) {jErrorDialog(this, prompt.get("XLog")+e.getMessage());}
+    }
+
+    /**
+     * 返回路径指向文件夹的压缩zip文件夹的byte码
+     */
+    public byte[] fetchZipBytesOf(String filePath, boolean showError) {
+        Path path = Paths.get(filePath);
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        try (ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream);
+             Stream<Path> walk = Files.walk(path)) {
+            walk.forEach(file -> {
+                try {
+                    String entryName = path.relativize(file).toString();
+                    if (Files.isDirectory(file)) {
+                        if (!entryName.endsWith("/"))
+                            entryName += "/";
+                        zipOutputStream.putNextEntry(new ZipEntry(entryName));
+                        zipOutputStream.closeEntry();
+                    } else {
+                        zipOutputStream.putNextEntry(new ZipEntry(entryName));
+                        Files.copy(file, zipOutputStream);
+                        zipOutputStream.closeEntry();
+                    }
+                } catch (IOException e) {
+                    if (showError) jErrorDialog(null, prompt.get("ErrorZip")+path);
+                }
+            });
+        } catch (IOException e) {
+            if (showError) {jErrorDialog(null, prompt.get("FileNotFoundIn")+filePath);}
+        } return byteArrayOutputStream.toByteArray();
+    }
+
+    /**
+     * 将byte码转为压缩zip文件并解压后保存到路径
+     */
+    private void saveZipBytesTo(Path path, byte[] bytes) {
+        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(bytes);
+             ZipInputStream zipInputStream = new ZipInputStream(byteArrayInputStream)) {
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                Path resolvedPath = path.resolve(entry.getName());
+                if (entry.isDirectory()) {
+                    Files.createDirectories(resolvedPath);
+                } else {
+                    Files.createDirectories(resolvedPath.getParent());
+                    try (OutputStream outputStream = Files.newOutputStream(resolvedPath)) {
+                        byte[] buffer = new byte[1024];
+                        int len;
+                        while ((len = zipInputStream.read(buffer)) > 0) {
+                            outputStream.write(buffer, 0, len);
+                        }
+                    }
+                } zipInputStream.closeEntry();
+            }
+        } catch (IOException e) {
+            jErrorDialog(this, prompt.get("FailToSave")+e.getMessage());
+        }
     }
 
     /**

@@ -1,0 +1,3 @@
+jpackage --type app-image --input C:\Users\Maxtr\Desktop\artifacts\jar --runtime-image C:\Users\Maxtr\Desktop\artifacts\jre --name ServerArcane --main-jar ArcaneServer.jar --icon C:\Users\Maxtr\Desktop\artifacts\arcane.ico --app-version 1.4 --vendor Paprfish --description ServerLauncher_for_ArcaneRealm --dest C:\Users\Maxtr\Desktop\artifacts\out
+
+jpackage --type app-image --input C:\Users\Maxtr\Desktop\artifacts\jar --runtime-image C:\Users\Maxtr\Desktop\artifacts\jre --name ClientArcane --main-jar ArcaneClient.jar --icon C:\Users\Maxtr\Desktop\artifacts\arcane.ico --app-version 1.4 --vendor Paprfish --description ClientLauncher_for_ArcaneRealm --dest C:\Users\Maxtr\Desktop\artifacts\out

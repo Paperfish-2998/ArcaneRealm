@@ -7,6 +7,7 @@
   "DuplicateTSResources": "缓存目录下已存在相同时间戳的资源",
   "UnKnownSysToCallViewer": "未知的操作系统，未能调用图片查看器",
   "ErrorViewingImage": "查看图片时出错：",
+  "ErrorZip": "压缩文件时出错：",
   "FileNotFoundIn": "未找到文件资源于：",
   "XProgram": "程序无法运行：",
   "XCreateConfigFileIn": "无法创建配置文件于：",

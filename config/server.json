@@ -2,5 +2,6 @@
   "log": "./log/server/",
   "cache": "./cache/server/",
   "share": "./resource/share/",
-  "upload": "C:/Users/Maxtr/Desktop/"
+  "upload": "C:/Users/Maxtr/Desktop/",
+  "defaultPort": "27181"
 }
