@@ -57,7 +57,7 @@ public class ClientArcane {
             }
             @Override boolean setName() {
                 if (!name.isBlank()) return true;
-                if (input.isBlank()) println(new1("无效的名称", SOFT_RED), true);
+                if (input.isBlank() || input.contains(" ")) println(new1("无效的名称（不能包含空格）", SOFT_RED), true);
                 else if (tryJoin(input)) {name = input; Notify(); return false;}
                 print("你的名称：", true); return false;
             }

@@ -31,7 +31,7 @@ import java.util.zip.ZipOutputStream;
  * by PaperFish, from 2024.11
  */
 public class NightShell extends JFrame {
-    public static final String VERSION = "Arcane Realm v1.8.1";
+    public static final String VERSION = "Arcane Realm v1.8.2";
     private final String BirthTime = nowTime(3);
     private final ReentrantLock textLock = new ReentrantLock();
     private final JLabel titleLabel = new JLabel();
