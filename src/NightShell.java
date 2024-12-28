@@ -4,10 +4,12 @@ import com.google.gson.reflect.TypeToken;
 
 import javax.swing.*;
 import javax.swing.event.MouseInputAdapter;
+import javax.swing.filechooser.FileView;
 import javax.swing.plaf.ColorUIResource;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import javax.swing.text.*;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.*;
 import java.io.*;
 import java.net.Inet4Address;
@@ -20,6 +22,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -32,6 +38,7 @@ import java.util.zip.ZipOutputStream;
  */
 public class NightShell extends JFrame {
     public static final String VERSION = "Arcane Realm v1.8.2";
+    public final String Terminal;
     private final String BirthTime = nowTime(3);
     private final ReentrantLock textLock = new ReentrantLock();
     private final JLabel titleLabel = new JLabel();
@@ -39,21 +46,23 @@ public class NightShell extends JFrame {
     private final JTextPane inputArea = new JTextPane();
 
     public NightShell(String terminal) {
+        this.Terminal = terminal;
         setSize(480, 640);
         setResizable(true);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         getContentPane().setBackground(SOFT_BLACK);
-        changeTitleBar(terminal);
+        changeTitleBar();
 
         addTextPane(displayArea, false, SOFT_BLACK, BorderLayout.CENTER);
         addTextPane(inputArea, true, HARD_GREY, BorderLayout.SOUTH);
+        addTransferHandler4TextPane(displayArea);
         addDocListeners();
-        preconfigure();
+        preConfigure();
         print("%o , by Paperfish\n\n", VERSION, LIGHT_GREY, true);
     }
 
-    private void preconfigure() {
+    private void preConfigure() {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             UIManager.put("Button.focus", new ColorUIResource(new Color(0, 0, 0, 0)));
@@ -64,6 +73,7 @@ public class NightShell extends JFrame {
                 int clickOffset = displayArea.viewToModel2D(e.getPoint());
                 for (LinkInfo link : links) {
                     if (clickOffset >= link.start && clickOffset <= link.start+link.length) {
+                        NightShell.this.print("Downloading...", true);
                         requestFile(link.stampx, link.location); repaintLink(link); return;
             }}}
         });
@@ -107,6 +117,30 @@ public class NightShell extends JFrame {
         dSP.setVerticalScrollBar(new NightScrollBar(BgC));
         add(dSP, BL);
     }
+
+    private void addTransferHandler4TextPane(JTextPane textPane) {
+        if (Terminal.equals("Server")) return;
+        textPane.setTransferHandler(new TransferHandler() {
+            @Override public boolean canImport(TransferSupport support) {
+                return support.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+            }
+            @Override public boolean importData(TransferSupport support) {
+                if (canImport(support)) {
+                    try {
+                        Object data = support.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+                        if (data instanceof List<?> rawList && !rawList.isEmpty() && rawList.get(0) instanceof File) {
+                            @SuppressWarnings("unchecked")
+                            List<File> files = (List<File>) rawList;
+                            for (File file : files)
+                                sendFile(file.getAbsolutePath());
+                            return true;
+                        }
+                    } catch (Exception ignored) {}
+                } return false;
+            }
+        });
+    }
+    void sendFile(String path) {}
 
     public void setDisplayHighlightable(boolean bool) {
         if (bool) displayArea.setHighlighter(new DefaultHighlighter());
@@ -387,8 +421,8 @@ public class NightShell extends JFrame {
     }
 
 
-    public void changeTitleBar(String terminal) {
-        setTitle(VERSION+" | "+terminal);
+    public void changeTitleBar() {
+        setTitle(VERSION+" | "+Terminal);
         setUndecorated(true);
         JPanel titleBar = new JPanel();
         titleBar.setLayout(new BorderLayout());
@@ -398,7 +432,7 @@ public class NightShell extends JFrame {
         titleLabel.setForeground(LIGHT_GREY);
         titleLabel.setHorizontalAlignment(SwingConstants.LEFT);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
-        resetTitle(terminal);
+        resetTitle();
         JPanel buttonLabel = new JPanel();
         buttonLabel.setLayout(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         buttonLabel.setOpaque(false);
@@ -426,7 +460,7 @@ public class NightShell extends JFrame {
         add(titleBar, BorderLayout.NORTH);
     }
     @Override public void setTitle(String title) {titleLabel.setText(title);}
-    public void resetTitle(String terminal) {setTitle(VERSION+" | "+terminal);}
+    public void resetTitle() {setTitle(VERSION+" | "+Terminal);}
     public void switchUndecorated() {
         if (SHIFT) {SHIFT = false;
             setVisible(false);
@@ -557,8 +591,8 @@ public class NightShell extends JFrame {
     }
 
     public String chooseFile_manual() {
-        JFileChooser chooser = new JFileChooser(config.get("upload"));
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+        TFileChooser chooser = new TFileChooser(config.get("upload"));
+        if (chooser.showOpenDialog(this) == TFileChooser.APPROVE_OPTION) {
             return chooser.getSelectedFile().getAbsolutePath();
         } return "\0";
     }
@@ -618,9 +652,11 @@ public class NightShell extends JFrame {
 
     public String filePathIn(String stampx, String location) {return config.get(location) + stampx;}
 
+    private static final String[] imageNames = new String[] {".png", ".jpg", ".jpeg", ".gif", ".bmp"};
     private static boolean isImageName(String fileName) {
-        return (fileName.endsWith(".png") || fileName.endsWith(".gif") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"));
+        for (String s : imageNames) if (fileName.toLowerCase().endsWith(s)) return true; return false;
     }
+
     public String[] name_suffix(String stampx) {
         int i = stampx.lastIndexOf(".");
         return (i == -1) ? new String[]{stampx, ""} : new String[]{stampx.substring(0, i), stampx.substring(i)};
@@ -707,6 +743,53 @@ public class NightShell extends JFrame {
             writer.write(displayArea.getText());
             print("LOG: 日志备份已完成，安全结束\n", true);
         } catch (Exception e) {jErrorDialog(this, prompt.get("XLog")+e.getMessage());}
+    }
+
+    /**
+     * A FileChooser that displays thumbnails of image files
+     */
+    public static class TFileChooser extends JFileChooser {
+        private final ExecutorService executor;
+        private final Map<File, Icon> thumbnailCache = new ConcurrentHashMap<>();
+        public TFileChooser(String currentDirectoryPath) {
+            super(currentDirectoryPath);
+            this.executor = Executors.newFixedThreadPool(4);
+            this.setFileView(new FileView() {
+                @Override
+                public Icon getIcon(File f) {
+                    if (f.isFile() && isImageName(f.getName())) {
+                        if (thumbnailCache.containsKey(f))
+                            return thumbnailCache.get(f);
+                        executor.submit(() -> {
+                            Icon icon = generateThumbnail(f);
+                            if (icon != null) {
+                                thumbnailCache.put(f, icon);
+                                SwingUtilities.invokeLater(TFileChooser.this::repaint);
+                            }
+                        });
+                        return UIManager.getIcon("FileView.fileIcon");
+                    } return super.getIcon(f);
+                }
+            });
+        }
+        @Override public int showOpenDialog(Component parent) throws HeadlessException {
+            int result = super.showOpenDialog(parent); shutdownExecutor(); return result;
+        }
+        @Override public int showSaveDialog(Component parent) throws HeadlessException {
+            int result = super.showSaveDialog(parent); shutdownExecutor(); return result;
+        }
+        private static Icon generateThumbnail(File file) {
+            try {
+                ImageIcon icon = new ImageIcon(file.getAbsolutePath());
+                return new ImageIcon(icon.getImage().getScaledInstance(64, 64, Image.SCALE_SMOOTH));
+            } catch (Exception ignored) {}
+            return null;
+        }
+        private void shutdownExecutor() {
+            executor.shutdown();
+            try {if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {executor.shutdownNow();}
+            } catch (InterruptedException e) {executor.shutdownNow();}
+        }
     }
 
     /**

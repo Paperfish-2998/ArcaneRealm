@@ -34,6 +34,14 @@ public class ClientArcane {
             @Override void requestFile(String stampx, String type) {
                 if (!check_and_show(stampx, "cache", false)) request(RequestFile, stampx, type);
             }
+            @Override void sendFile(String path) {
+                try {Thread.sleep(10);} catch (InterruptedException e) {throw new RuntimeException(e);}
+                print("Uploading...\n", true);
+                if (!path.equals("\0")) {
+                    byte[] data = shell.fetchZipBytesOf(path, true);
+                    if (data != null) report(NightShell.newFile(data, new File(path).getName()));
+                }
+            }
             @Override void EnterInput() {super.EnterInput(); if (setPort() && setName()) say(input);}
             @Override boolean setPort() {
                 if (guest.isBlank()) return false;
@@ -137,7 +145,7 @@ public class ClientArcane {
         Ear.start();
     }
 
-    public void EarClose() {Ear.interrupt(); DoEar = false; shell.resetTitle("Client"); shell.endLog();}
+    public void EarClose() {Ear.interrupt(); DoEar = false; shell.resetTitle(); shell.endLog();}
 
     /**
      * 控制台输入：'/'开头为指令，否则作为内容向服务器报告
@@ -170,7 +178,7 @@ public class ClientArcane {
             case NightShell.MemberList, NightShell.HostPort -> request(cmd);
             case NightShell.ReColor -> {if (shell.resetTheColor(command) != null) request(NightShell.ReColor, command[1], command[2]);}
             case NightShell.ResetFont -> shell.resetTheFont(command);
-            case NightShell.SendFile -> sendFile();
+            case NightShell.SendFile -> shell.sendFile(shell.chooseFile_manual());
             case NightShell.RequestSharedList -> request(NightShell.RequestSharedList);
             case NightShell.ExitSys -> {
                 request(cmd);
@@ -212,13 +220,6 @@ public class ClientArcane {
         shell.setTitle(String.format("%s | 客户端：%s | (在线人数：%s)", args[0], name, args[1]));
     }
 
-    private void sendFile() {
-        String path = shell.chooseFile_manual();
-        if (!path.equals("\0")) {
-            byte[] data = shell.fetchZipBytesOf(path, true);
-            if (data != null) report(NightShell.newFile(data, new File(path).getName()));
-        }
-    }
 
     private static final String HELP_TEXT = """
                 /H    指令帮助

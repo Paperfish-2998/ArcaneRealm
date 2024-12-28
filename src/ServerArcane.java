@@ -132,7 +132,7 @@ public class ServerArcane {
         serverSocket.close();
         clientAntennas.clear();
         shell.print("服务器已关闭\n", false);
-        shell.resetTitle("Server");
+        shell.resetTitle();
         shell.endLog();
     }
 
