@@ -161,18 +161,20 @@ public class ClientArcane {
      * 执行客户端指令
      */
     private void command(String M) throws IOException {
-        String[] cmd = M.split(" ");
-        switch (cmd[0].toLowerCase()) {
+        String[] command = M.split(" ");
+        String cmd = command[0].toLowerCase();
+        switch (cmd) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> shell.printColorSpecification();
             case NightShell.ClearHint -> shell.clearHint();
-            case NightShell.MemberList, NightShell.HostPort -> request(M);
-            case NightShell.ReColor -> {if (shell.resetTheColor(cmd) != null) request(NightShell.ReColor, cmd[1], cmd[2]);}
-            case NightShell.ResetFont -> shell.resetTheFont(cmd);
+            case NightShell.MemberList, NightShell.HostPort -> request(cmd);
+            case NightShell.ReColor -> {if (shell.resetTheColor(command) != null) request(NightShell.ReColor, command[1], command[2]);}
+            case NightShell.ResetFont -> shell.resetTheFont(command);
             case NightShell.SendFile -> sendFile();
             case NightShell.RequestSharedList -> request(NightShell.RequestSharedList);
             case NightShell.ExitSys -> {
-                request(M); shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
+                request(cmd);
+                shell.print("你已离开讨论间\n", NightShell.LIGHT_GREY, false);
                 shell.print("已断开与服务器的连接\n", false); EarClose();
             }
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);

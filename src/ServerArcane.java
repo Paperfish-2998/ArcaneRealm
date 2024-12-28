@@ -175,40 +175,41 @@ public class ServerArcane {
      * 执行服务器指令
      */
     private void command(String M) throws IOException {
-        String[] cmd = M.split(" ");
-        switch (cmd[0].toLowerCase()) {
+        String[] command = M.split(" ");
+        String cmd = command[0].toLowerCase();
+        switch (cmd) {
             case NightShell.Help -> shell.print(HELP_TEXT, true);
             case NightShell.ColorHint -> shell.printColorSpecification();
             case NightShell.MemberList -> shell.println(getMemberList(true), true);
             case NightShell.HostPort -> shell.println(getHostPort(), true);
             case NightShell.ClearHint -> shell.clearHint();
-            case NightShell.BanTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
-            case NightShell.AllowTextHighlight -> {orderAll(cmd[0]); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
+            case NightShell.BanTextHighlight -> {orderAll(cmd); shell.print("已%o成员选中文本\n", "禁止", NightShell.SOFT_RED, false);}
+            case NightShell.AllowTextHighlight -> {orderAll(cmd); shell.print("已%o成员选中文本\n", "允许", NightShell.LIGHT_GREEN, false);}
             case NightShell.BanNewClient -> {allowNewClient = false; broadcastT("讨论间现在%o新成员加入", "禁止", NightShell.SOFT_RED);}
             case NightShell.AllowNewClient -> {allowNewClient = true; broadcastT("讨论间现在%o新成员加入", "允许", NightShell.LIGHT_GREEN);}
-            case NightShell.ShareFile -> shell.sharePicture(cmd);
+            case NightShell.ShareFile -> shell.sharePicture(command);
             case NightShell.RequestSharedList -> shell.checkSharedLinks();
-            case NightShell.TerminalSys -> {broadcastT("服务器%o了讨论间", "关闭", NightShell.DARK_RED); orderAll(NightShell.TerminalSys); END = true;}
+            case NightShell.TerminalSys -> {broadcastT("服务器%o了讨论间", "关闭", NightShell.DARK_RED); orderAll(cmd); END = true;}
             case NightShell.RenameRoom -> {
-                if (cmd.length == 2) {roomName = cmd[1];
+                if (command.length == 2) {roomName = command[1];
                     broadcastT("房间名已更新为[%o]", roomName, NightShell.SOFT_WHITE);
                     updateParaText();
-                } else if (cmd.length > 2) shell.print("房间名不能包含空格\n", true);
+                } else if (command.length > 2) shell.print("房间名不能包含空格\n", true);
                 else shell.print("未知指令，用法：/RN [name]\n", true);
             }
             case NightShell.ReColor -> {
-                Color[] newColors = shell.resetTheColor(cmd);
+                Color[] newColors = shell.resetTheColor(command);
                 if (newColors != null) {mainColor = newColors[0]; minorColor = newColors[1];
                     broadcastT(NightShell.merge(NightShell.newNotice("服务器[%o ", serverName, mainColor),
                             NightShell.newNotice("(%o)]已变更特征色", serverName, minorColor)));}
             }
-            case NightShell.ResetFont -> shell.resetTheFont(cmd);
+            case NightShell.ResetFont -> shell.resetTheFont(command);
             case NightShell.EjectOne -> {
-                if (cmd.length == 2) {
+                if (command.length == 2) {
                     if (clientAntennas.stream()
-                        .filter(c -> c.name.equals(cmd[1])).findFirst()
+                        .filter(c -> c.name.equals(command[1])).findFirst()
                         .map(c -> {ejectOne(c); return false;})
-                        .orElse(true)) shell.print("未找到名为[%o]的成员\n", cmd[1], NightShell.LIGHT_GREY, true);
+                        .orElse(true)) shell.print("未找到名为[%o]的成员\n", command[1], NightShell.LIGHT_GREY, true);
                 } else shell.print("未知指令，用法：/E [member]\n", true);
             }
             default -> shell.print("未知指令，/H 查看指令帮助\n", true);
